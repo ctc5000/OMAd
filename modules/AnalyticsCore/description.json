@@ -1,0 +1,8 @@
+{
+  "moduleName": "AnalyticsCore",
+  "version": "1.0.0",
+  "description": "Ядро системы аналитики для отслеживания событий",
+  "apiPrefix": "/api/analytics",
+  "requiresAuth": false,
+  "dependencies": []
+}

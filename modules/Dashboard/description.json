@@ -1,0 +1,8 @@
+{
+  "moduleName": "Dashboard",
+  "version": "1.0.0",
+  "description": "Дашборд для отображения метрик аналитики в реальном времени",
+  "apiPrefix": "/api/dashboard",
+  "requiresAuth": false,
+  "dependencies": ["AnalyticsCore"]
+}

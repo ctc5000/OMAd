@@ -1,0 +1,8 @@
+{
+  "moduleName": "Reports",
+  "version": "1.0.0",
+  "description": "Система отчетов",
+  "apiPrefix": "/api/reports",
+  "requiresAuth": false,
+  "dependencies": []
+}
