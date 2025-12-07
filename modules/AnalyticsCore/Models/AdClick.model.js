@@ -33,7 +33,27 @@ module.exports = (sequelize, DataTypes) => {
         tableName: 'analytics_ad_clicks',
         timestamps: true,
         createdAt: 'created_at',
-        updatedAt: false
+        updatedAt: false,
+        indexes: [
+            {
+                fields: ['session_id']
+            },
+            {
+                fields: ['campaign_id']
+            },
+            {
+                fields: ['impression_id']
+            },
+            {
+                fields: ['created_at']
+            },
+            {
+                fields: ['session_id', 'campaign_id']
+            },
+            {
+                fields: ['campaign_id', 'created_at']
+            }
+        ]
     });
 
     AdClick.associate = function(models) {
@@ -48,6 +68,12 @@ module.exports = (sequelize, DataTypes) => {
         AdClick.belongsTo(models.AdImpression, {
             foreignKey: 'impression_id',
             as: 'impression'
+        });
+
+        // Связь с кампанией
+        AdClick.belongsTo(models.Campaign, {
+            foreignKey: 'campaign_id',
+            as: 'campaign'
         });
 
         // Связь с конверсиями

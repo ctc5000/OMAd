@@ -38,6 +38,12 @@ module.exports = (sequelize, DataTypes) => {
             },
             {
                 fields: ['created_at']
+            },
+            {
+                fields: ['session_id', 'campaign_id']
+            },
+            {
+                fields: ['campaign_id', 'created_at']
             }
         ]
     });
@@ -52,11 +58,18 @@ module.exports = (sequelize, DataTypes) => {
             });
         }
 
+        // Проверяем, существует ли модель Campaign
+        if (models.Campaign) {
+            AdImpression.belongsTo(models.Campaign, {
+                foreignKey: 'campaign_id',
+                as: 'campaign'
+            });
+        }
+
         // Проверяем, существует ли модель AdClick
         if (models.AdClick) {
             AdImpression.hasMany(models.AdClick, {
-                foreignKey: 'session_id',
-                sourceKey: 'session_id',
+                foreignKey: 'impression_id',
                 as: 'clicks'
             });
         }

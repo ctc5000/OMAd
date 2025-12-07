@@ -90,7 +90,7 @@ async function loadModules() {
                 const controllerPath = path.join(modulePath, 'Controllers', `${moduleName}Controller.js`);
                 if (fs.existsSync(controllerPath)) {
                     const ControllerClass = require(controllerPath);
-                    const controllerInstance = new ControllerClass(global.sequelizeModels);
+                    const controllerInstance = new ControllerClass(global.sequelizeModels, sequelize);
 
                     // Загрузка роутов
                     const routePath = path.join(modulePath, `${moduleName}.route.js`);

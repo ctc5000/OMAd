@@ -45,7 +45,33 @@ module.exports = (sequelize, DataTypes) => {
         tableName: 'analytics_ad_conversions',
         timestamps: true,
         createdAt: 'created_at',
-        updatedAt: false
+        updatedAt: false,
+        indexes: [
+            {
+                fields: ['session_id']
+            },
+            {
+                fields: ['campaign_id']
+            },
+            {
+                fields: ['click_id']
+            },
+            {
+                fields: ['created_at']
+            },
+            {
+                fields: ['status']
+            },
+            {
+                fields: ['session_id', 'campaign_id']
+            },
+            {
+                fields: ['campaign_id', 'created_at']
+            },
+            {
+                fields: ['campaign_id', 'status']
+            }
+        ]
     });
 
     AdConversion.associate = function(models) {

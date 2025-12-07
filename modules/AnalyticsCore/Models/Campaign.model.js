@@ -53,7 +53,18 @@ module.exports = (sequelize, DataTypes) => {
         tableName: 'analytics_campaigns',
         timestamps: true,
         createdAt: 'created_at',
-        updatedAt: 'updated_at'
+        updatedAt: 'updated_at',
+        indexes: [
+            {
+                fields: ['advertiser_id']
+            },
+            {
+                fields: ['status']
+            },
+            {
+                fields: ['created_at']
+            }
+        ]
     });
 
     Campaign.associate = function(models) {
