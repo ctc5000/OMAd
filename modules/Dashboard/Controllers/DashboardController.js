@@ -269,27 +269,31 @@ class DashboardController {
             const hourPromises = [];
 
             for (let i = 23; i >= 0; i--) {
-                const hourStart = new Date(now);
-                hourStart.setHours(now.getHours() - i, 0, 0, 0);
+                // Используем IIFE для захвата значений переменных в каждой итерации
+                (() => {
+                    const hourStart = new Date(now);
+                    hourStart.setHours(now.getHours() - i, 0, 0, 0);
 
-                const hourEnd = new Date(hourStart);
-                hourEnd.setHours(hourStart.getHours() + 1);
+                    const hourEnd = new Date(hourStart);
+                    hourEnd.setHours(hourStart.getHours() + 1);
 
-                // Стало:
-hourPromises.push(
-    Promise.all([
-        this.getImpressionsInPeriod(hourStart, hourEnd),
-        this.getClicksInPeriod(hourStart, hourEnd),
-        this.getConversionsInPeriod(hourStart, hourEnd)
-    ]).then(([impressions, clicks, conversions]) => ({
-        hour: hourStart.getHours(),
-        label: `${hourStart.getHours()}:00`,
-        impressions,
-        clicks,
-        conversions,
-        ctr: impressions > 0 ? parseFloat((clicks / impressions * 100).toFixed(2)) : 0
-    }))
-);
+                    const hourValue = hourStart.getHours();
+
+                    hourPromises.push(
+                        Promise.all([
+                            this.getImpressionsInPeriod(hourStart, hourEnd),
+                            this.getClicksInPeriod(hourStart, hourEnd),
+                            this.getConversionsInPeriod(hourStart, hourEnd)
+                        ]).then(([impressions, clicks, conversions]) => ({
+                            hour: hourValue,
+                            label: `${hourValue}:00`,
+                            impressions,
+                            clicks,
+                            conversions,
+                            ctr: impressions > 0 ? parseFloat((clicks / impressions * 100).toFixed(2)) : 0
+                        }))
+                    );
+                })();
             }
 
             const hourlyData = await Promise.all(hourPromises);
@@ -754,7 +758,9 @@ hourPromises.push(
     // Методы для получения статистики кампании
     async getCampaignStats(campaign_id, dateRange) {
         try {
-            const [impressions, clicks, conversions] = await Promise.all([
+            const sequelizeInstance = this.sequelize || this.Sequelize;
+            
+            const [impressions, clicks, conversions, reachResult] = await Promise.all([
                 this.models.AdImpression.count({
                     where: {
                         campaign_id,
@@ -773,15 +779,28 @@ hourPromises.push(
                         status: 'confirmed',
                         created_at: { [this.Op.between]: [dateRange.start, dateRange.end] }
                     }
+                }),
+                // Расчет reach как уникальные session_id с impression
+                this.models.AdImpression.findAll({
+                    attributes: [
+                        [sequelizeInstance.fn('COUNT', sequelizeInstance.fn('DISTINCT', sequelizeInstance.col('session_id'))), 'reach']
+                    ],
+                    where: {
+                        campaign_id,
+                        created_at: { [this.Op.between]: [dateRange.start, dateRange.end] }
+                    },
+                    raw: true
                 })
             ]);
+
+            const reach = parseInt(reachResult[0]?.reach || 0);
 
             return {
                 impressions,
                 clicks,
                 conversions,
                 ctr: impressions > 0 ? (clicks / impressions * 100).toFixed(2) : 0,
-                cr: clicks > 0 ? (conversions / clicks * 100).toFixed(2) : 0,
+                cr: reach > 0 ? (conversions / reach * 100).toFixed(2) : 0,
                 cpu_v: 0
             };
         } catch (error) {
