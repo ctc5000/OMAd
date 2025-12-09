@@ -1,54 +1,47 @@
+const ExcelJS = require('exceljs');
+
 /**
  * Построитель Excel отчётов
- * TODO: Реализовать полную логику генерации Excel с помощью exceljs
+ * Генерирует простой Excel с листами Summary и Daily Metrics
  */
 class ExcelReportBuilder {
     constructor() {
-        // TODO: Инициализировать exceljs
-        // const ExcelJS = require('exceljs');
-        // this.ExcelJS = ExcelJS;
+        this.ExcelJS = ExcelJS;
     }
 
     /**
      * Построить Excel отчёт из данных
-     * TODO: Реализовать полную логику
      * 
-     * Структура отчёта:
-     * 1. Sheet "Summary" - сводка метрик (UV, Reach, Clicks, Conversions, CTR, CR)
-     * 2. Sheet "Daily Metrics" - таблица метрик по дням
-     * 3. Sheet "Segments" - детализация по сегментам ресторанов
-     * 4. Sheet "Events" - подробный лог событий (если нужен)
-     * 5. Sheet "Funnel" - анализ воронки
+     * Входные данные:
+     * {
+     *   summary: { uv, reach, impressions, clicks, conversions, ctr, cr, cpc, cpl },
+     *   daily: [{ date, impressions, clicks, conversions }, ...]
+     * }
      */
     async build(reportData) {
         console.log('🔨 Построение Excel отчёта');
 
         try {
-            // TODO: Валидация входных данных
-            if (!reportData || !reportData.campaign) {
-                throw new Error('Invalid report data');
+            // Валидация входных данных
+            if (!reportData || !reportData.summary) {
+                throw new Error('Invalid report data: missing summary');
             }
 
-            // TODO: Создать новый Workbook
-            // const workbook = new this.ExcelJS.Workbook();
+            // Создать новый Workbook
+            const workbook = new this.ExcelJS.Workbook();
 
-            // TODO: Добавить лист со сводкой
-            // this.addSummarySheet(workbook, reportData);
+            // Добавить лист со сводкой
+            this.addSummarySheet(workbook, reportData.summary);
 
-            // TODO: Добавить лист с метриками по дням
-            // this.addDailyMetricsSheet(workbook, reportData);
+            // Добавить лист с ежедневными метриками
+            if (reportData.daily && reportData.daily.length > 0) {
+                this.addDailyMetricsSheet(workbook, reportData.daily);
+            }
 
-            // TODO: Добавить лист с сегментами
-            // this.addSegmentsSheet(workbook, reportData);
-
-            // TODO: Добавить лист с воронкой
-            // this.addFunnelSheet(workbook, reportData);
-
-            // TODO: Сформировать буфер и вернуть
-            // const buffer = await workbook.xlsx.writeBuffer();
-            // return buffer;
-
-            throw new Error('Excel generation not implemented yet');
+            // Сформировать буфер и вернуть
+            const buffer = await workbook.xlsx.writeBuffer();
+            console.log(`✅ Excel отчёт успешно сгенерирован (размер: ${buffer.length} байт)`);
+            return buffer;
 
         } catch (error) {
             console.error('❌ Ошибка при построении Excel:', error.message);
@@ -57,59 +50,95 @@ class ExcelReportBuilder {
     }
 
     /**
-     * TODO: Добавить лист со сводкой метрик
+     * Добавить лист со сводкой метрик
      */
-    addSummarySheet(workbook, reportData) {
+    addSummarySheet(workbook, summary) {
         console.log('📊 Добавление листа сводки');
-        // TODO: Реализовать
-        // - Информация о кампании
-        // - Период отчёта
-        // - Основные метрики (UV, Reach, Clicks, Conversions)
-        // - Производные метрики (CTR, CR, CPUV, CPC, CPL)
+
+        const worksheet = workbook.addWorksheet('Summary');
+
+        // Установить ширину колонок
+        worksheet.columns = [
+            { header: 'Метрика', key: 'metric', width: 20 },
+            { header: 'Значение', key: 'value', width: 20 }
+        ];
+
+        // Заполнить данные
+        const metricsData = [
+            { metric: 'UV', value: summary.uv || 0 },
+            { metric: 'Reach', value: summary.reach || 0 },
+            { metric: 'Impressions', value: summary.impressions || 0 },
+            { metric: 'Clicks', value: summary.clicks || 0 },
+            { metric: 'Conversions', value: summary.conversions || 0 },
+            { metric: 'CTR, %', value: summary.ctr !== undefined ? summary.ctr : 0 },
+            { metric: 'CR, %', value: summary.cr !== undefined ? summary.cr : 0 },
+            { metric: 'CPC, ₽', value: summary.cpc !== null ? summary.cpc : '—' },
+            { metric: 'CPL, ₽', value: summary.cpl !== null ? summary.cpl : '—' },
+        ];
+
+        worksheet.addRows(metricsData);
+
+        // Форматировать заголовок
+        const headerRow = worksheet.getRow(1);
+        headerRow.font = { bold: true };
+        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD3D3D3' } };
+        headerRow.alignment = { horizontal: 'center', vertical: 'center' };
+
+        // Форматировать ячейки со значениями
+        worksheet.eachRow((row, rowNumber) => {
+            if (rowNumber > 1) {
+                row.alignment = { horizontal: 'right', vertical: 'center' };
+            }
+        });
     }
 
     /**
-     * TODO: Добавить лист с метриками по дням
+     * Добавить лист с ежедневными метриками
      */
-    addDailyMetricsSheet(workbook, reportData) {
+    addDailyMetricsSheet(workbook, dailyData) {
         console.log('📋 Добавление листа ежедневных метрик');
-        // TODO: Реализовать
-        // - Таблица: День | Impressions | Clicks | Conversions | CTR | CR
-        // - Форматирование ячеек
-        // - Условное форматирование (выделение лучших/худших дней)
-    }
 
-    /**
-     * TODO: Добавить лист с детализацией по сегментам
-     */
-    addSegmentsSheet(workbook, reportData) {
-        console.log('📌 Добавление листа сегментов');
-        // TODO: Реализовать
-        // - Таблица: Сегмент | UV | Reach | Clicks | Conversions | CTR | CR
-        // - Анализ эффективности по сегментам
-    }
+        const worksheet = workbook.addWorksheet('Daily Metrics');
 
-    /**
-     * TODO: Добавить лист с анализом воронки
-     */
-    addFunnelSheet(workbook, reportData) {
-        console.log('🔗 Добавление листа воронки');
-        // TODO: Реализовать
-        // - Таблица: Sessions | Impressions | Clicks | Conversions
-        // - Процент прохождения на каждом этапе
-        // - Отсевы на каждом шаге
-    }
+        // Установить ширину колонок
+        worksheet.columns = [
+            { header: 'Дата', key: 'date', width: 15 },
+            { header: 'Impressions', key: 'impressions', width: 15 },
+            { header: 'Clicks', key: 'clicks', width: 15 },
+            { header: 'Conversions', key: 'conversions', width: 15 }
+        ];
 
-    /**
-     * TODO: Форматировать таблицу
-     */
-    formatTable(worksheet, startRow, columns, data) {
-        console.log('🎨 Форматирование таблицы');
-        // TODO: Реализовать
-        // - Заголовки
-        // - Числовое форматирование
-        // - Размер колонок
-        // - Границы
+        // Подготовить данные для таблицы
+        const rows = dailyData.map(item => ({
+            date: item.date,
+            impressions: item.impressions || 0,
+            clicks: item.clicks || 0,
+            conversions: item.conversions || 0
+        }));
+
+        worksheet.addRows(rows);
+
+        // Форматировать заголовок
+        const headerRow = worksheet.getRow(1);
+        headerRow.font = { bold: true };
+        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD3D3D3' } };
+        headerRow.alignment = { horizontal: 'center', vertical: 'center' };
+
+        // Форматировать ячейки данных
+        worksheet.eachRow((row, rowNumber) => {
+            if (rowNumber > 1) {
+                row.cells.forEach((cell, index) => {
+                    if (index > 0) {
+                        // Числовое форматирование для колонок с метриками
+                        cell.numFmt = '#,##0';
+                        cell.alignment = { horizontal: 'right', vertical: 'center' };
+                    } else {
+                        // Выравнивание по центру для даты
+                        cell.alignment = { horizontal: 'center', vertical: 'center' };
+                    }
+                });
+            }
+        });
     }
 }
 

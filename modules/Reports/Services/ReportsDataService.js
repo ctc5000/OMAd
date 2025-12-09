@@ -96,47 +96,78 @@ class ReportsDataService {
         console.log(`📊 Получение сводных метрик: кампания ${campaignId}, ${fromDate} - ${toDate}`);
 
         try {
-            // TODO: Валидация входных параметров
+            // Валидация входных параметров
             if (!campaignId || !fromDate || !toDate) {
                 throw new Error('Invalid parameters: campaignId, fromDate, toDate are required');
             }
 
-            // TODO: Проверить, что fromDate <= toDate
+            // Проверить, что fromDate <= toDate
             if (new Date(fromDate) > new Date(toDate)) {
                 throw new Error('Invalid date range: fromDate must be before toDate');
             }
 
-            // TODO: Получить данные кампании (cost_per_click, cost_per_uv, cost_per_lead)
-            // const campaign = await this.models.Campaign.findByPk(campaignId);
+            // Получить данные кампании (cost_per_click, cost_per_uv, cost_per_lead)
+            const campaign = await this.models.Campaign.findByPk(campaignId);
+            if (!campaign) {
+                throw new Error(`Campaign ${campaignId} not found`);
+            }
 
-            // TODO: Выполнить SQL-запросы параллельно (Promise.all)
-            // const [uv, impressions, reach, clicks, conversions, cost] = await Promise.all([
-            //     this.queryUV(campaignId, fromDate, toDate),
-            //     this.queryImpressions(campaignId, fromDate, toDate),
-            //     this.queryReach(campaignId, fromDate, toDate),
-            //     this.queryClicks(campaignId, fromDate, toDate),
-            //     this.queryConversions(campaignId, fromDate, toDate),
-            //     this.queryCost(campaignId, fromDate, toDate)
-            // ]);
+            // Выполнить SQL-запросы параллельно
+            const [impressionResult, reachResult, clicksResult, conversionsResult] = await Promise.all([
+                this.sequelize.query(
+                    `SELECT COUNT(*) as count FROM analytics_ad_impressions 
+                    WHERE campaign_id = :campaignId AND created_at BETWEEN :fromDate AND :toDate`,
+                    { replacements: { campaignId, fromDate, toDate }, type: this.sequelize.QueryTypes.SELECT }
+                ),
+                this.sequelize.query(
+                    `SELECT COUNT(DISTINCT session_id) as count FROM analytics_ad_impressions 
+                    WHERE campaign_id = :campaignId AND created_at BETWEEN :fromDate AND :toDate`,
+                    { replacements: { campaignId, fromDate, toDate }, type: this.sequelize.QueryTypes.SELECT }
+                ),
+                this.sequelize.query(
+                    `SELECT COUNT(*) as count FROM analytics_ad_clicks 
+                    WHERE campaign_id = :campaignId AND created_at BETWEEN :fromDate AND :toDate`,
+                    { replacements: { campaignId, fromDate, toDate }, type: this.sequelize.QueryTypes.SELECT }
+                ),
+                this.sequelize.query(
+                    `SELECT COUNT(*) as count FROM analytics_ad_conversions 
+                    WHERE campaign_id = :campaignId AND status = 'confirmed' AND created_at BETWEEN :fromDate AND :toDate`,
+                    { replacements: { campaignId, fromDate, toDate }, type: this.sequelize.QueryTypes.SELECT }
+                )
+            ]);
 
-            // TODO: Рассчитать производные метрики
-            // const metrics = {
-            //     uv,
-            //     impressions,
-            //     reach,
-            //     clicks,
-            //     conversions,
-            //     cost,
-            //     ctr: impressions > 0 ? (clicks / impressions * 100).toFixed(2) : 0,
-            //     cr: clicks > 0 ? (conversions / clicks * 100).toFixed(2) : 0,
-            //     cpc: clicks > 0 ? (cost / clicks).toFixed(2) : 0,
-            //     cpl: conversions > 0 ? (cost / conversions).toFixed(2) : 0,
-            //     cpuv: uv > 0 ? (cost / uv).toFixed(2) : 0
-            // };
+            const impressions = parseInt(impressionResult[0]?.count || 0, 10);
+            const reach = parseInt(reachResult[0]?.count || 0, 10);
+            const clicks = parseInt(clicksResult[0]?.count || 0, 10);
+            const conversions = parseInt(conversionsResult[0]?.count || 0, 10);
 
-            // return metrics;
+            // UV = уникальные сессии с impression
+            const uv = reach; // Для MVP: UV = Reach
 
-            throw new Error('Not implemented yet');
+            // Расчет производных метрик
+            const ctr = impressions > 0 ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : 0;
+            const cr = reach > 0 ? parseFloat(((conversions / reach) * 100).toFixed(2)) : 0;
+            
+            // Стоимостные метрики
+            const cpc = campaign.cost_per_click !== null ? parseFloat(campaign.cost_per_click) : null;
+            const cpl = campaign.cost_per_lead !== null ? parseFloat(campaign.cost_per_lead) : null;
+            const cpuv = campaign.cost_per_uv !== null ? parseFloat(campaign.cost_per_uv) : null;
+
+            const metrics = {
+                uv,
+                impressions,
+                reach,
+                clicks,
+                conversions,
+                ctr,
+                cr,
+                cpc,
+                cpl,
+                cpuv
+            };
+
+            console.log(`✅ Сводные метрики получены:`, metrics);
+            return metrics;
 
         } catch (error) {
             console.error('❌ Ошибка при получении сводных метрик:', error.message);
@@ -202,32 +233,50 @@ class ReportsDataService {
         console.log(`📅 Получение ежедневных метрик: кампания ${campaignId}, ${fromDate} - ${toDate}`);
 
         try {
-            // TODO: Валидация входных параметров
+            // Валидация входных параметров
             if (!campaignId || !fromDate || !toDate) {
                 throw new Error('Invalid parameters: campaignId, fromDate, toDate are required');
             }
 
-            // TODO: Выполнить четыре SQL-запроса параллельно
-            // const [impressionsByDay, clicksByDay, conversionsByDay, uvByDay] = await Promise.all([
-            //     this.queryDailyImpressions(campaignId, fromDate, toDate),
-            //     this.queryDailyClicks(campaignId, fromDate, toDate),
-            //     this.queryDailyConversions(campaignId, fromDate, toDate),
-            //     this.queryDailyUV(campaignId, fromDate, toDate)
-            // ]);
+            // Выполнить четыре SQL-запроса параллельно
+            const [impressionsByDay, clicksByDay, conversionsByDay] = await Promise.all([
+                this.sequelize.query(
+                    `SELECT DATE(created_at) as date, COUNT(*) as impressions 
+                    FROM analytics_ad_impressions 
+                    WHERE campaign_id = :campaignId AND created_at BETWEEN :fromDate AND :toDate 
+                    GROUP BY DATE(created_at) 
+                    ORDER BY DATE(created_at) ASC`,
+                    { replacements: { campaignId, fromDate, toDate }, type: this.sequelize.QueryTypes.SELECT }
+                ),
+                this.sequelize.query(
+                    `SELECT DATE(created_at) as date, COUNT(*) as clicks 
+                    FROM analytics_ad_clicks 
+                    WHERE campaign_id = :campaignId AND created_at BETWEEN :fromDate AND :toDate 
+                    GROUP BY DATE(created_at) 
+                    ORDER BY DATE(created_at) ASC`,
+                    { replacements: { campaignId, fromDate, toDate }, type: this.sequelize.QueryTypes.SELECT }
+                ),
+                this.sequelize.query(
+                    `SELECT DATE(created_at) as date, COUNT(*) as conversions 
+                    FROM analytics_ad_conversions 
+                    WHERE campaign_id = :campaignId AND status = 'confirmed' AND created_at BETWEEN :fromDate AND :toDate 
+                    GROUP BY DATE(created_at) 
+                    ORDER BY DATE(created_at) ASC`,
+                    { replacements: { campaignId, fromDate, toDate }, type: this.sequelize.QueryTypes.SELECT }
+                )
+            ]);
 
-            // TODO: Merged результаты в единый массив
-            // const dailyMetrics = this.mergeDailyData(
-            //     impressionsByDay,
-            //     clicksByDay,
-            //     conversionsByDay,
-            //     uvByDay,
-            //     fromDate,
-            //     toDate
-            // );
+            // Merged результаты в единый массив по дате
+            const dailyMetrics = this.mergeDailyData(
+                impressionsByDay,
+                clicksByDay,
+                conversionsByDay,
+                fromDate,
+                toDate
+            );
 
-            // return dailyMetrics;
-
-            throw new Error('Not implemented yet');
+            console.log(`✅ Ежедневные метрики получены: ${dailyMetrics.length} дней`);
+            return dailyMetrics;
 
         } catch (error) {
             console.error('❌ Ошибка при получении ежедневных метрик:', error.message);
@@ -549,17 +598,59 @@ class ReportsDataService {
     }
 
     /**
-     * TODO: Merge результатов ежедневных метрик в единый массив
+     * Merge результатов ежедневных метрик в единый массив
      * 
      * Должен:
-     * 1. Объединить четыре массива (impressions, clicks, conversions, uv) по дате
+     * 1. Объединить три массива (impressions, clicks, conversions) по дате
      * 2. Заполнить дни без данных нулями
      * 3. Вернуть отсортированный массив по дате
      */
-    mergeDailyData(impressionsByDay, clicksByDay, conversionsByDay, uvByDay, fromDate, toDate) {
+    mergeDailyData(impressionsByDay, clicksByDay, conversionsByDay, fromDate, toDate) {
         console.log('🔀 Merge ежедневных данных');
-        // TODO: Реализовать логику merge
-        return [];
+
+        // Создать map для хранения данных по дате
+        const dailyMap = {};
+
+        // Заполнить дни из диапазона нулями
+        const start = new Date(fromDate);
+        const end = new Date(toDate);
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            const dateStr = d.toISOString().split('T')[0];
+            dailyMap[dateStr] = {
+                date: dateStr,
+                impressions: 0,
+                clicks: 0,
+                conversions: 0
+            };
+        }
+
+        // Добавить данные impressions
+        impressionsByDay.forEach(row => {
+            const dateStr = new Date(row.date).toISOString().split('T')[0];
+            if (dailyMap[dateStr]) {
+                dailyMap[dateStr].impressions = parseInt(row.impressions || 0, 10);
+            }
+        });
+
+        // Добавить данные clicks
+        clicksByDay.forEach(row => {
+            const dateStr = new Date(row.date).toISOString().split('T')[0];
+            if (dailyMap[dateStr]) {
+                dailyMap[dateStr].clicks = parseInt(row.clicks || 0, 10);
+            }
+        });
+
+        // Добавить данные conversions
+        conversionsByDay.forEach(row => {
+            const dateStr = new Date(row.date).toISOString().split('T')[0];
+            if (dailyMap[dateStr]) {
+                dailyMap[dateStr].conversions = parseInt(row.conversions || 0, 10);
+            }
+        });
+
+        // Вернуть отсортированный массив
+        const result = Object.values(dailyMap).sort((a, b) => new Date(a.date) - new Date(b.date));
+        return result;
     }
 
     /**

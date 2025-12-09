@@ -1,62 +1,53 @@
+const PdfReportBuilder = require('../Builders/PdfReportBuilder');
+const ExcelReportBuilder = require('../Builders/ExcelReportBuilder');
+const ReportsDataService = require('./ReportsDataService');
+
 /**
  * Сервис для генерации отчётов
- * TODO: Реализовать логику получения данных из БД и форматирования
+ * Использует ReportsDataService для получения данных и соответствующие builders
  */
 class ReportsService {
     constructor(models, sequelize) {
         this.models = models;
         this.sequelize = sequelize;
         
-        // TODO: Инициализировать построители отчётов
-        // this.pdfBuilder = new PdfReportBuilder();
-        // this.excelBuilder = new ExcelReportBuilder();
+        // Инициализировать построители отчётов
+        this.pdfBuilder = new PdfReportBuilder();
+        this.excelBuilder = new ExcelReportBuilder();
+        this.dataService = new ReportsDataService(models, sequelize);
     }
 
     /**
      * Генерирует PDF отчёт по кампании
-     * TODO: Реализовать полную логику
      * 
-     * Шаги:
-     * 1. Получить данные кампании из БД
-     * 2. Получить метрики за период
-     * 3. Сгенерировать графики (если нужны)
-     * 4. Собрать данные в нужный формат
-     * 5. Вызвать PdfReportBuilder.build()
-     * 6. Вернуть бинарный буфер
+     * @param {number} campaignId - ID кампании
+     * @param {string} fromDate - Дата начала периода (YYYY-MM-DD)
+     * @param {string} toDate - Дата окончания периода (YYYY-MM-DD)
+     * @returns {Promise<Buffer>} - PDF документ в виде Buffer
      */
     async generatePdfReport(campaignId, fromDate, toDate) {
         console.log(`📄 Генерация PDF отчёта: кампания ${campaignId}, ${fromDate} - ${toDate}`);
 
         try {
-            // TODO: Валидация dates
-            // TODO: Получить Campaign из БД
-            // const campaign = await this.models.Campaign.findByPk(campaignId);
-            // if (!campaign) throw new Error(`Campaign ${campaignId} not found`);
+            // Валидация даты
+            if (!fromDate || !toDate) {
+                throw new Error('fromDate и toDate обязательны');
+            }
 
-            // TODO: Получить метрики за период
-            // const metrics = await this.getMetricsForPeriod(campaignId, fromDate, toDate);
+            // Получить данные для отчёта
+            const summary = await this.dataService.getSummaryMetrics(campaignId, fromDate, toDate);
+            const daily = await this.dataService.getDailyMetrics(campaignId, fromDate, toDate);
 
-            // TODO: Получить данные по событиям (impressions, clicks, conversions)
-            // const eventsData = await this.getEventsData(campaignId, fromDate, toDate);
+            // Подготовить данные для PDF
+            const reportData = {
+                summary,
+                daily
+            };
 
-            // TODO: Сгенерировать графики
-            // const charts = await this.generateCharts(metrics);
+            // Построить PDF через PdfReportBuilder
+            const pdfBuffer = await this.pdfBuilder.build(reportData);
 
-            // TODO: Собрать объект данных
-            // const reportData = {
-            //     campaign,
-            //     metrics,
-            //     eventsData,
-            //     charts,
-            //     period: { from: fromDate, to: toDate }
-            // };
-
-            // TODO: Построить PDF через PdfReportBuilder
-            // const pdfBuffer = await this.pdfBuilder.build(reportData);
-
-            // return pdfBuffer;
-
-            throw new Error('Not implemented yet');
+            return pdfBuffer;
 
         } catch (error) {
             console.error('❌ Ошибка при генерации PDF:', error.message);
@@ -66,100 +57,40 @@ class ReportsService {
 
     /**
      * Генерирует Excel отчёт по кампании
-     * TODO: Реализовать полную логику
      * 
-     * Шаги:
-     * 1. Получить данные кампании из БД
-     * 2. Получить метрики за период
-     * 3. Собрать данные в нужный формат
-     * 4. Вызвать ExcelReportBuilder.build()
-     * 5. Вернуть бинарный буфер
+     * @param {number} campaignId - ID кампании
+     * @param {string} fromDate - Дата начала периода (YYYY-MM-DD)
+     * @param {string} toDate - Дата окончания периода (YYYY-MM-DD)
+     * @returns {Promise<Buffer>} - Excel документ в виде Buffer
      */
     async generateExcelReport(campaignId, fromDate, toDate) {
         console.log(`📊 Генерация Excel отчёта: кампания ${campaignId}, ${fromDate} - ${toDate}`);
 
         try {
-            // TODO: Валидация dates
-            // TODO: Получить Campaign из БД
-            // const campaign = await this.models.Campaign.findByPk(campaignId);
-            // if (!campaign) throw new Error(`Campaign ${campaignId} not found`);
+            // Валидация даты
+            if (!fromDate || !toDate) {
+                throw new Error('fromDate и toDate обязательны');
+            }
 
-            // TODO: Получить метрики за период
-            // const metrics = await this.getMetricsForPeriod(campaignId, fromDate, toDate);
+            // Получить данные для отчёта
+            const summary = await this.dataService.getSummaryMetrics(campaignId, fromDate, toDate);
+            const daily = await this.dataService.getDailyMetrics(campaignId, fromDate, toDate);
 
-            // TODO: Получить данные по событиям
-            // const eventsData = await this.getEventsData(campaignId, fromDate, toDate);
+            // Подготовить данные для Excel
+            const reportData = {
+                summary,
+                daily
+            };
 
-            // TODO: Собрать объект данных
-            // const reportData = {
-            //     campaign,
-            //     metrics,
-            //     eventsData,
-            //     period: { from: fromDate, to: toDate }
-            // };
+            // Построить Excel через ExcelReportBuilder
+            const excelBuffer = await this.excelBuilder.build(reportData);
 
-            // TODO: Построить Excel через ExcelReportBuilder
-            // const excelBuffer = await this.excelBuilder.build(reportData);
-
-            // return excelBuffer;
-
-            throw new Error('Not implemented yet');
+            return excelBuffer;
 
         } catch (error) {
             console.error('❌ Ошибка при генерации Excel:', error.message);
             throw error;
         }
-    }
-
-    /**
-     * TODO: Получить метрики за период
-     */
-    async getMetricsForPeriod(campaignId, fromDate, toDate) {
-        console.log(`📊 Получение метрик для кампании ${campaignId} за период ${fromDate} - ${toDate}`);
-        
-        // TODO: Реализовать логику получения:
-        // - UV (unique visitors)
-        // - Reach (unique impressions)
-        // - Impressions (количество)
-        // - Clicks
-        // - Conversions
-        // - CTR, CR, CPUV, CPC, CPL
-        
-        return {};
-    }
-
-    /**
-     * TODO: Получить подробные данные по событиям
-     */
-    async getEventsData(campaignId, fromDate, toDate) {
-        console.log(`📝 Получение данных событий для кампании ${campaignId}`);
-        
-        // TODO: Реализовать логику получения:
-        // - Список impressions по дням
-        // - Список clicks по дням
-        // - Список conversions по дням
-        // - Группировка по ресторанам/сегментам
-        
-        return {
-            impressionsByDay: [],
-            clicksByDay: [],
-            conversionsByDay: []
-        };
-    }
-
-    /**
-     * TODO: Сгенерировать графики для отчёта
-     */
-    async generateCharts(metrics) {
-        console.log(`📈 Генерация графиков для отчёта`);
-        
-        // TODO: Реализовать через chartGenerator:
-        // - График показов по дням
-        // - График кликов по дням
-        // - График конверсий по дням
-        // - График CTR/CR динамики
-        
-        return [];
     }
 }
 

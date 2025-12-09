@@ -1,14 +1,20 @@
+const ReportsService = require('../Services/Reports.service');
+
 class ReportsController {
     constructor(models, sequelize) {
         this.models = models;
         this.sequelize = sequelize;
-        // TODO: Инициализировать ReportsService
-        this.reportsService = null;
+        
+        // Инициализировать ReportsService
+        this.reportsService = new ReportsService(models, sequelize);
     }
 
     /**
      * Генерирует PDF отчёт по кампании
-     * TODO: Реализовать логику получения данных и генерации PDF
+     * 
+     * Query параметры:
+     * - from: дата начала (YYYY-MM-DD)
+     * - to: дата окончания (YYYY-MM-DD)
      */
     async generatePdfReport(req, res) {
         try {
@@ -17,31 +23,33 @@ class ReportsController {
 
             console.log(`📄 Запрос PDF отчёта для кампании ${id}, период: ${from} - ${to}`);
 
-            // TODO: Валидация параметров
+            // Валидация параметров
             if (!id) {
                 return res.status(400).json({
                     success: false,
-                    error: 'Требуется campaign_id'
+                    error: 'Требуется campaign_id в URL'
                 });
             }
 
-            // TODO: Вызвать this.reportsService.generatePdfReport(id, from, to)
-            // const pdfBuffer = await this.reportsService.generatePdfReport(id, from, to);
+            if (!from || !to) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Требуются параметры from и to (формат: YYYY-MM-DD)'
+                });
+            }
 
-            // TODO: Отправить файл клиенту
-            // res.setHeader('Content-Type', 'application/pdf');
-            // res.setHeader('Content-Disposition', `attachment; filename="report_campaign_${id}.pdf"`);
-            // res.send(pdfBuffer);
+            // Вызвать сервис для генерации PDF
+            const pdfBuffer = await this.reportsService.generatePdfReport(id, from, to);
 
-            // Заглушка для развития
-            return res.status(501).json({
-                success: false,
-                error: 'Функция генерации PDF отчётов еще не реализована',
-                message: 'TODO: Implement PDF report generation'
-            });
+            // Отправить файл клиенту
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="report_campaign_${id}.pdf"`);
+            res.send(pdfBuffer);
+
+            console.log(`✅ PDF отчёт отправлен клиенту`);
 
         } catch (error) {
-            console.error('❌ Ошибка генерации PDF отчёта:', error);
+            console.error('❌ Ошибка генерации PDF отчёта:', error.message);
             return res.status(500).json({
                 success: false,
                 error: error.message
@@ -51,7 +59,10 @@ class ReportsController {
 
     /**
      * Генерирует Excel отчёт по кампании
-     * TODO: Реализовать логику получения данных и генерации Excel
+     * 
+     * Query параметры:
+     * - from: дата начала (YYYY-MM-DD)
+     * - to: дата окончания (YYYY-MM-DD)
      */
     async generateExcelReport(req, res) {
         try {
@@ -60,31 +71,33 @@ class ReportsController {
 
             console.log(`📊 Запрос Excel отчёта для кампании ${id}, период: ${from} - ${to}`);
 
-            // TODO: Валидация параметров
+            // Валидация параметров
             if (!id) {
                 return res.status(400).json({
                     success: false,
-                    error: 'Требуется campaign_id'
+                    error: 'Требуется campaign_id в URL'
                 });
             }
 
-            // TODO: Вызвать this.reportsService.generateExcelReport(id, from, to)
-            // const excelBuffer = await this.reportsService.generateExcelReport(id, from, to);
+            if (!from || !to) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Требуются параметры from и to (формат: YYYY-MM-DD)'
+                });
+            }
 
-            // TODO: Отправить файл клиенту
-            // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            // res.setHeader('Content-Disposition', `attachment; filename="report_campaign_${id}.xlsx"`);
-            // res.send(excelBuffer);
+            // Вызвать сервис для генерации Excel
+            const excelBuffer = await this.reportsService.generateExcelReport(id, from, to);
 
-            // Заглушка для развития
-            return res.status(501).json({
-                success: false,
-                error: 'Функция генерации Excel отчётов еще не реализована',
-                message: 'TODO: Implement Excel report generation'
-            });
+            // Отправить файл клиенту
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename="report_campaign_${id}.xlsx"`);
+            res.send(excelBuffer);
+
+            console.log(`✅ Excel отчёт отправлен клиенту`);
 
         } catch (error) {
-            console.error('❌ Ошибка генерации Excel отчёта:', error);
+            console.error('❌ Ошибка генерации Excel отчёта:', error.message);
             return res.status(500).json({
                 success: false,
                 error: error.message
@@ -94,4 +107,3 @@ class ReportsController {
 }
 
 module.exports = ReportsController;
-
