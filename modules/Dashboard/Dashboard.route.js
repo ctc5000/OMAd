@@ -2,11 +2,13 @@ module.exports = (app, moduleName, controller, makeHandlerAwareOfAsyncErrors, mo
     const apiPrefix = '/api/dashboard';
 
     console.log(`📊 Регистрация маршрутов для модуля ${moduleName}...`);
+    console.log(`📊 API Prefix: ${apiPrefix}`);
 
     // Основной эндпоинт дашборда
     app.get(`${apiPrefix}/data`,
         makeHandlerAwareOfAsyncErrors(controller.getDashboardData.bind(controller))
     );
+    console.log(`✅ Зарегистрирован маршрут: GET ${apiPrefix}/data`);
 
     // Метрики в реальном времени
     app.get(`${apiPrefix}/realtime`,
@@ -383,7 +385,11 @@ module.exports = (app, moduleName, controller, makeHandlerAwareOfAsyncErrors, mo
                       \${overview.change.cr_change >= 0 ? '+' : ''}\${overview.change.cr_change}%
                     </span>
                   </div>
-                  <div class="metric-label">CPU-V: \${overview.cpu_v.toFixed(2)} ₽</div>
+                  <div class="metric-label">
+                    CPUV: \${overview.cpuv !== null ? overview.cpuv.toFixed(2) + ' ₽' : '—'} | 
+                    CPC: \${overview.cpc !== null ? overview.cpc.toFixed(2) + ' ₽' : '—'} | 
+                    CPL: \${overview.cpl !== null ? overview.cpl.toFixed(2) + ' ₽' : '—'}
+                  </div>
                 </div>
               </div>
             \`;
@@ -400,6 +406,9 @@ module.exports = (app, moduleName, controller, makeHandlerAwareOfAsyncErrors, mo
                       <th>Выручка</th>
                       <th>CTR</th>
                       <th>CR</th>
+                      <th>CPUV</th>
+                      <th>CPC</th>
+                      <th>CPL</th>
                       <th>Статус</th>
                     </tr>
                   </thead>
@@ -411,6 +420,9 @@ module.exports = (app, moduleName, controller, makeHandlerAwareOfAsyncErrors, mo
                         <td>\${campaign.revenue ? campaign.revenue.toFixed(2) + ' ₽' : '—'}</td>
                         <td>\${campaign.ctr}%</td>
                         <td>\${campaign.cr}%</td>
+                        <td>\${campaign.cpuv !== null ? campaign.cpuv.toFixed(2) + ' ₽' : '—'}</td>
+                        <td>\${campaign.cpc !== null ? campaign.cpc.toFixed(2) + ' ₽' : '—'}</td>
+                        <td>\${campaign.cpl !== null ? campaign.cpl.toFixed(2) + ' ₽' : '—'}</td>
                         <td>
                           <span class="status-badge \${campaign.status === 'active' ? 'status-active' : 'status-paused'}">
                             \${campaign.status === 'active' ? 'Активна' : 'На паузе'}

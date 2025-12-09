@@ -82,20 +82,40 @@ class DashboardController {
                 reach,
                 impressions,
                 clicks,
-                conversions
+                conversions,
+                campaignsData
             ] = await Promise.all([
                 this.calculateUV(dateRange, campaign_id, advertiser_id),
                 this.calculateReach(dateRange, campaign_id, advertiser_id),
                 this.calculateImpressions(dateRange, campaign_id, advertiser_id),
                 this.calculateClicks(dateRange, campaign_id, advertiser_id),
-                this.calculateConversions(dateRange, campaign_id, advertiser_id)
+                this.calculateConversions(dateRange, campaign_id, advertiser_id),
+                this.getCampaignCosts(campaign_id, advertiser_id)
             ]);
 
+            // Производные метрики: CTR = clicks / impressions
             const ctr = impressions > 0 ? parseFloat((clicks / impressions * 100).toFixed(2)) : 0;
+            // Производная метрика: CR = conversions / reach
             const cr = reach > 0 ? parseFloat((conversions / reach * 100).toFixed(2)) : 0;
-            const cpu_v = uv > 0 ? 0 : 0;
-            const cpc = clicks > 0 ? 0 : 0;
-            const cpl = conversions > 0 ? 0 : 0;
+            
+            // Расчет стоимостных метрик
+            // CPUV = cost_per_uv (стоимость за одного посетителя)
+            let cpuv = null;
+            if (campaignsData && campaignsData.cost_per_uv) {
+                cpuv = parseFloat(campaignsData.cost_per_uv);
+            }
+            
+            // CPC = cost_per_click (стоимость за один клик)
+            let cpc = null;
+            if (campaignsData && campaignsData.cost_per_click) {
+                cpc = parseFloat(campaignsData.cost_per_click);
+            }
+            
+            // CPL = cost_per_lead (стоимость за одну конверсию)
+            let cpl = null;
+            if (campaignsData && campaignsData.cost_per_lead) {
+                cpl = parseFloat(campaignsData.cost_per_lead);
+            }
 
             const result = {
                 uv: parseInt(uv) || 0,
@@ -105,9 +125,9 @@ class DashboardController {
                 conversions: parseInt(conversions) || 0,
                 ctr: parseFloat(ctr) || 0,
                 cr: parseFloat(cr) || 0,
-                cpu_v: parseFloat(cpu_v) || 0,
-                cpc: parseFloat(cpc) || 0,
-                cpl: parseFloat(cpl) || 0
+                cpuv: cpuv,
+                cpc: cpc,
+                cpl: cpl
             };
 
             // Добавляем изменения только если не рекурсивный вызов
@@ -201,7 +221,9 @@ class DashboardController {
                         revenue: parseFloat(campaign.revenue) || 0,
                         ctr: stats.ctr,
                         cr: stats.cr,
-                        cpu_v: stats.cpu_v,
+                        cpuv: stats.cpuv,
+                        cpc: stats.cpc,
+                        cpl: stats.cpl,
                         status: campaignInfo?.status || 'unknown'
                     };
                 })
@@ -655,9 +677,9 @@ class DashboardController {
             conversions: 45,
             ctr: 10.0,
             cr: 4.1,
-            cpu_v: 25.5,
-            cpc: 120.0,
-            cpl: 1200.0,
+            cpuv: null,
+            cpc: null,
+            cpl: null,
             change: {
                 uv_change: 12.5,
                 impressions_change: 8.3,
@@ -760,7 +782,7 @@ class DashboardController {
         try {
             const sequelizeInstance = this.sequelize || this.Sequelize;
             
-            const [impressions, clicks, conversions, reachResult] = await Promise.all([
+            const [impressions, clicks, conversions, reachResult, campaignData] = await Promise.all([
                 this.models.AdImpression.count({
                     where: {
                         campaign_id,
@@ -790,22 +812,78 @@ class DashboardController {
                         created_at: { [this.Op.between]: [dateRange.start, dateRange.end] }
                     },
                     raw: true
-                })
+                }),
+                // Получаем данные кампании для стоимостных метрик
+                this.models.Campaign ? this.models.Campaign.findByPk(campaign_id, { raw: true }) : Promise.resolve(null)
             ]);
 
             const reach = parseInt(reachResult[0]?.reach || 0);
+
+            // Производная метрика: CTR = clicks / impressions
+            const ctr = impressions > 0 ? (clicks / impressions * 100).toFixed(2) : 0;
+            // Производная метрика: CR = conversions / reach
+            const cr = reach > 0 ? (conversions / reach * 100).toFixed(2) : 0;
+            
+            // Расчет стоимостных метрик (это уже стоимости за единицу, не нужно умножать)
+            // CPUV = cost_per_uv (стоимость за одного посетителя)
+            let cpuv = null;
+            if (campaignData && campaignData.cost_per_uv) {
+                cpuv = parseFloat(campaignData.cost_per_uv);
+            }
+            
+            // CPC = cost_per_click (стоимость за один клик)
+            let cpc = null;
+            if (campaignData && campaignData.cost_per_click) {
+                cpc = parseFloat(campaignData.cost_per_click);
+            }
+            
+            // CPL = cost_per_lead (стоимость за одну конверсию)
+            let cpl = null;
+            if (campaignData && campaignData.cost_per_lead) {
+                cpl = parseFloat(campaignData.cost_per_lead);
+            }
 
             return {
                 impressions,
                 clicks,
                 conversions,
-                ctr: impressions > 0 ? (clicks / impressions * 100).toFixed(2) : 0,
-                cr: reach > 0 ? (conversions / reach * 100).toFixed(2) : 0,
-                cpu_v: 0
+                ctr: parseFloat(ctr),
+                cr: parseFloat(cr),
+                cpuv: cpuv,
+                cpc: cpc,
+                cpl: cpl
             };
         } catch (error) {
             console.error('Ошибка получения статистики кампании:', error);
-            return { impressions: 0, clicks: 0, conversions: 0, ctr: 0, cr: 0, cpu_v: 0 };
+            return { impressions: 0, clicks: 0, conversions: 0, ctr: 0, cr: 0, cpuv: null, cpc: null, cpl: null };
+        }
+    }
+
+    // Получить стоимостные параметры кампании для расчета CPUV, CPC, CPL
+    async getCampaignCosts(campaign_id, advertiser_id) {
+        try {
+            if (!campaign_id && !advertiser_id) {
+                return null;
+            }
+
+            const where = {};
+            if (campaign_id) {
+                where.id = campaign_id;
+            } else if (advertiser_id) {
+                where.advertiser_id = advertiser_id;
+            }
+
+            // Получаем кампанию с данными о стоимостях
+            const campaign = await this.models.Campaign.findOne({
+                attributes: ['cost_per_uv', 'cost_per_click', 'cost_per_lead'],
+                where,
+                raw: true
+            });
+
+            return campaign;
+        } catch (error) {
+            console.error('Ошибка получения стоимостей кампании:', error);
+            return null;
         }
     }
 

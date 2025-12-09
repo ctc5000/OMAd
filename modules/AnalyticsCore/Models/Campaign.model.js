@@ -33,6 +33,22 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.DECIMAL(10, 2),
             allowNull: true
         },
+        // Фактические стоимости для расчета метрик
+        cost_per_uv: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true,
+            comment: 'Стоимость за одного уникального посетителя'
+        },
+        cost_per_click: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true,
+            comment: 'Стоимость за один клик'
+        },
+        cost_per_lead: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true,
+            comment: 'Стоимость за одну конверсию (lead)'
+        },
         status: {
             type: DataTypes.ENUM('draft', 'active', 'paused', 'completed', 'archived'),
             defaultValue: 'draft'

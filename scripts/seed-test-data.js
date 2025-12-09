@@ -47,6 +47,9 @@ async function seed() {
             name: "Кофейная кампания - Зимние скидки",
             status: "active",
             cpu_v_target: 12.5,
+            cost_per_uv: 10.0,
+            cost_per_click: 5.0,
+            cost_per_lead: 50.0,
             budget: 50000,
             start_date: moment().subtract(30, 'days').toDate(),
             end_date: moment().add(30, 'days').toDate()
@@ -56,6 +59,9 @@ async function seed() {
             name: "Премиум рестораны - Новогодний банкет",
             status: "active",
             cpu_v_target: 25.0,
+            cost_per_uv: 20.0,
+            cost_per_click: 15.0,
+            cost_per_lead: 150.0,
             budget: 100000,
             start_date: moment().subtract(15, 'days').toDate(),
             end_date: moment().add(45, 'days').toDate()
@@ -65,6 +71,9 @@ async function seed() {
             name: "Средний сегмент - Бизнес-ланчи",
             status: "active",
             cpu_v_target: 18.0,
+            cost_per_uv: 15.0,
+            cost_per_click: 8.0,
+            cost_per_lead: 80.0,
             budget: 75000,
             start_date: moment().subtract(20, 'days').toDate(),
             end_date: moment().add(40, 'days').toDate()
@@ -74,6 +83,9 @@ async function seed() {
             name: "Кофейная кампания - Утренний кофе",
             status: "paused",
             cpu_v_target: 10.0,
+            cost_per_uv: 8.0,
+            cost_per_click: 3.0,
+            cost_per_lead: 40.0,
             budget: 30000,
             start_date: moment().subtract(60, 'days').toDate(),
             end_date: moment().subtract(10, 'days').toDate()
@@ -83,6 +95,9 @@ async function seed() {
             name: "Фастфуд - Доставка 24/7",
             status: "active",
             cpu_v_target: 15.0,
+            cost_per_uv: 12.0,
+            cost_per_click: 6.0,
+            cost_per_lead: 60.0,
             budget: 60000,
             start_date: moment().subtract(5, 'days').toDate(),
             end_date: moment().add(25, 'days').toDate()
@@ -92,6 +107,9 @@ async function seed() {
             name: "Барная кампания - Happy Hours",
             status: "draft",
             cpu_v_target: 20.0,
+            cost_per_uv: 18.0,
+            cost_per_click: 12.0,
+            cost_per_lead: 120.0,
             budget: 40000,
             start_date: moment().add(5, 'days').toDate(),
             end_date: moment().add(35, 'days').toDate()
@@ -101,6 +119,9 @@ async function seed() {
             name: "Премиум ужины (архивная)",
             status: "archived",
             cpu_v_target: 30.0,
+            cost_per_uv: 25.0,
+            cost_per_click: 18.0,
+            cost_per_lead: 180.0,
             budget: 80000,
             start_date: moment().subtract(90, 'days').toDate(),
             end_date: moment().subtract(30, 'days').toDate()

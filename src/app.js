@@ -219,9 +219,13 @@ async function startServer() {
 
         // Обработка 404
         app.use((req, res) => {
+            console.warn(`⚠️ 404: ${req.method} ${req.path}`);
             res.status(404).json({
                 success: false,
-                error: 'Маршрут не найден'
+                error: 'Маршрут не найден',
+                path: req.path,
+                method: req.method,
+                availableModules: Object.keys(modules)
             });
         });
 
