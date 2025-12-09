@@ -75,6 +75,8 @@ async function loadModules() {
 
         if (fs.statSync(modulePath).isDirectory()) {
             try {
+                console.log(`\n📦 Обработка модуля: ${moduleDir}`);
+                
                 // Загрузка описания модуля
                 const descriptionPath = path.join(modulePath, 'description.json');
                 let moduleName = moduleDir;
@@ -84,17 +86,27 @@ async function loadModules() {
                     const description = require(descriptionPath);
                     moduleName = description.moduleName || moduleDir;
                     apiPrefix = description.apiPrefix || apiPrefix;
+                    console.log(`   📄 description.json найден: moduleName="${moduleName}", apiPrefix="${apiPrefix}"`);
+                } else {
+                    console.log(`   ⚠️ description.json не найден, используем значения по умолчанию`);
                 }
 
                 // Загрузка контроллера
                 const controllerPath = path.join(modulePath, 'Controllers', `${moduleName}Controller.js`);
+                console.log(`   🔍 Поиск контроллера: ${controllerPath}`);
+                
                 if (fs.existsSync(controllerPath)) {
+                    console.log(`   ✅ Контроллер найден`);
                     const ControllerClass = require(controllerPath);
                     const controllerInstance = new ControllerClass(global.sequelizeModels, sequelize);
+                    console.log(`   ✅ Контроллер инициализирован`);
 
                     // Загрузка роутов
                     const routePath = path.join(modulePath, `${moduleName}.route.js`);
+                    console.log(`   🔍 Поиск роутов: ${routePath}`);
+                    
                     if (fs.existsSync(routePath)) {
+                        console.log(`   ✅ Роуты найдены`);
                         const route = require(routePath);
 
                         // Функция для обработки async ошибок
@@ -115,11 +127,16 @@ async function loadModules() {
                         route(app, moduleName, controllerInstance, makeHandlerAwareOfAsyncErrors, global.sequelizeModels);
                         loadedModules[moduleName] = controllerInstance;
 
-                        console.log(`✅ Модуль "${moduleName}" загружен (префикс: ${apiPrefix})`);
+                        console.log(`   ✅ Модуль "${moduleName}" успешно загружен (префикс: ${apiPrefix})`);
+                    } else {
+                        console.error(`   ❌ Файл роутов не найден: ${routePath}`);
                     }
+                } else {
+                    console.error(`   ❌ Контроллер не найден: ${controllerPath}`);
                 }
             } catch (error) {
                 console.error(`❌ Ошибка загрузки модуля ${moduleDir}:`, error);
+                console.error(error.stack);
             }
         }
     }

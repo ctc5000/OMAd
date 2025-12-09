@@ -405,11 +405,11 @@ app.get(`${apiPrefix}/web`, (req, res) => {
           <i class="fas fa-file-excel"></i> Скачать Excel
         </button>
       </div>
-      <div class="reports-info">
-        <i class="fas fa-info-circle"></i> 
-        Выберите кампанию из таблицы ниже (первая кампания будет использована по умолчанию) или укажите ID вручную.
-        Период: последние 7 дней.
-      </div>
+       <div class="reports-info">
+         <i class="fas fa-info-circle"></i> 
+         Кликните на строку в таблице кампаний ниже, чтобы выбрать кампанию для отчёта (или будет использована первая кампания по умолчанию).
+         Период: последние 7 дней.
+       </div>
     </div>
     
     <div class="footer">
@@ -421,6 +421,7 @@ app.get(`${apiPrefix}/web`, (req, res) => {
   <script>
     let currentPeriod = 'today';
     let refreshInterval;
+    let selectedCampaignId = null;
     
     // Загрузка данных
     async function loadDashboardData(period = 'today') {
@@ -523,7 +524,7 @@ app.get(`${apiPrefix}/web`, (req, res) => {
               '</thead>' +
               '<tbody>' +
                 data.campaigns.map(campaign => 
-                  '<tr>' +
+                  '<tr data-campaign-id="' + campaign.id + '" style="cursor: pointer;" onclick="selectCampaign(' + campaign.id + ')" title="Кликните для выбора кампании">' +
                     '<td><strong>' + campaign.name + '</strong></td>' +
                     '<td>' + campaign.conversions + '</td>' +
                     '<td>' + (campaign.revenue ? campaign.revenue.toFixed(2) + ' ₽' : '—') + '</td>' +
@@ -552,12 +553,12 @@ app.get(`${apiPrefix}/web`, (req, res) => {
             '<h2 class="chart-title"><i class="fas fa-filter"></i> Воронка конверсий</h2>' +
             '<div class="chart-container">' +
               '<div style="display: flex; flex-direction: column; gap: 20px; height: 100%;">' +
-                ['Сессии', 'Показы', 'Клики', 'Конверсии'].map((stage, index) => {
+                ['Сессии', 'Показы', 'Клики', 'Конверсии'].map(function(stage, index) {
                   const values = [funnel.sessions, funnel.impressions, funnel.clicks, funnel.conversions];
                   const percentages = [100, funnel.rates.impression_rate, funnel.rates.click_through_rate, funnel.rates.conversion_rate];
                   const dropoffs = [0, funnel.dropoffs.sessions_to_impressions, funnel.dropoffs.impressions_to_clicks, funnel.dropoffs.clicks_to_conversions];
                   
-                  return 
+                  return (
                     '<div style="display: flex; align-items: center; gap: 15px;">' +
                       '<div style="flex: 0 0 100px; font-weight: 600;">' + stage + '</div>' +
                       '<div style="flex: 1; background: rgba(255,255,255,0.1); height: 40px; border-radius: 8px; overflow: hidden; position: relative;">' +
@@ -571,7 +572,8 @@ app.get(`${apiPrefix}/web`, (req, res) => {
                           '- ' + dropoffs[index] +
                         '</div>' 
                       : '') +
-                    '</div>';
+                    '</div>'
+                  );
                 }).join('') +
               '</div>' +
             '</div>' +
@@ -644,6 +646,21 @@ app.get(`${apiPrefix}/web`, (req, res) => {
       }
     });
 
+    // Функция для выбора кампании
+    function selectCampaign(campaignId) {
+      selectedCampaignId = campaignId;
+      // Убрать выделение со всех строк
+      document.querySelectorAll('tr[data-campaign-id]').forEach(row => {
+        row.style.background = '';
+      });
+      // Выделить выбранную строку
+      const selectedRow = document.querySelector('tr[data-campaign-id="' + campaignId + '"]');
+      if (selectedRow) {
+        selectedRow.style.background = 'rgba(102, 126, 234, 0.3)';
+      }
+      console.log('✅ Выбрана кампания: ' + campaignId);
+    }
+
     // Функция для генерации отчёта
     async function generateReport(format) {
       const btnId = 'generate-' + format + '-btn';
@@ -652,17 +669,28 @@ app.get(`${apiPrefix}/web`, (req, res) => {
       btn.classList.add('report-btn-loading');
       
       try {
-        // Получить ID кампании (первой из таблицы или из input)
-        let campaignId = null;
-        const campaignCells = document.querySelectorAll('td:first-child');
-        if (campaignCells.length > 0) {
-          campaignId = campaignCells[0].textContent.trim();
-        } else {
+        // Получить ID кампании
+        let campaignId = selectedCampaignId;
+        
+        // Если кампания не выбрана, попробовать взять первую из таблицы
+        if (!campaignId) {
+          const firstCampaignRow = document.querySelector('tr[data-campaign-id]');
+          if (firstCampaignRow) {
+            campaignId = firstCampaignRow.getAttribute('data-campaign-id');
+            // Автоматически выбрать первую кампанию
+            selectCampaign(campaignId);
+          }
+        }
+        
+        // Если всё ещё нет ID, попросить ввести
+        if (!campaignId) {
           campaignId = prompt('Введите ID кампании:');
         }
 
         if (!campaignId || isNaN(campaignId)) {
-          alert('⚠️ Пожалуйста, укажите правильный ID кампании');
+          alert('⚠️ Пожалуйста, выберите кампанию из таблицы ниже или укажите ID кампании вручную.');
+          btn.disabled = false;
+          btn.classList.remove('report-btn-loading');
           return;
         }
 
