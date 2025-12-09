@@ -1,8 +1,8 @@
 {
   "moduleName": "Reports",
   "version": "1.0.0",
-  "description": "Система отчетов",
+  "description": "Модуль для генерации PDF и Excel отчётов по кампаниям",
   "apiPrefix": "/api/reports",
   "requiresAuth": false,
-  "dependencies": []
+  "dependencies": ["AnalyticsCore", "Dashboard"]
 }
