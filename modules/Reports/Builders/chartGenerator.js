@@ -2,6 +2,7 @@
  * Генератор графиков для отчётов
  * TODO: Реализовать с помощью chartjs-node-canvas
  */
+const { ChartJSNodeCanvas } = require('chartjs-node-canvas');
 
 /**
  * Создать график
@@ -12,41 +13,30 @@
  * @returns {Promise<Buffer|null>} - буфер с изображением графика
  */
 async function createChart(type, data) {
-    console.log(`📈 Создание графика типа: ${type}`);
-
     try {
-        // TODO: Валидация типа графика
-        const validTypes = ['line', 'bar', 'pie', 'doughnut', 'area'];
-        if (!validTypes.includes(type)) {
-            throw new Error(`Invalid chart type: ${type}`);
-        }
+        const width = 800;
+        const height = 400;
+        const chartJSNodeCanvas = new ChartJSNodeCanvas({
+            width, height, backgroundColour: 'white'
+        });
 
-        // TODO: Валидация данных
-        if (!data || !data.labels || !data.datasets) {
-            throw new Error('Invalid chart data structure');
-        }
+        const configuration = {
+            type: type,
+            data: data,
+            options: {
+                responsive: false,
+                plugins: {
+                    legend: {
+                        display: true
+                    }
+                }
+            }
+        };
 
-        // TODO: Инициализировать ChartJSNodeCanvas
-        // const { ChartJSNodeCanvas } = require('chartjs-node-canvas');
-        // const chartJSNodeCanvas = new ChartJSNodeCanvas({
-        //     width: 800,
-        //     height: 400,
-        //     backgroundColour: 'white'
-        // });
-
-        // TODO: Подготовить конфигурацию графика
-        // const chartConfig = this.buildChartConfig(type, data);
-
-        // TODO: Отрендерить график
-        // const imageBuffer = await chartJSNodeCanvas.drawChart(chartConfig);
-
-        // return imageBuffer;
-
-        console.warn('⚠️ Chart generation not implemented yet, returning null');
-        return null;
-
+        const imageBuffer = await chartJSNodeCanvas.renderToBuffer(configuration);
+        return imageBuffer;
     } catch (error) {
-        console.error('❌ Ошибка при создании графика:', error.message);
+        console.error('Chart generation error:', error);
         return null;
     }
 }
