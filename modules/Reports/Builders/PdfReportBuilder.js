@@ -2,6 +2,7 @@ const PDFDocument = require('pdfkit');
 const { createLineChart, createBarChart } = require('./chartGenerator');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 class PdfReportBuilder {
     /**
@@ -24,24 +25,30 @@ class PdfReportBuilder {
                         left: 50, 
                         right: 50 
                     },
-                    bufferPages: true,  // Важно для корректной работы с буфером
-                    font: 'Helvetica'   // Используем стандартный шрифт
+                    bufferPages: true,
+                    autoFirstPage: false  // Отключаем автоматическое создание первой страницы
                 });
+
+                // Настройка шрифтов
+                doc.registerFont('custom', path.join(__dirname, '..', '..', '..', 'fonts', 'DejaVuSans.ttf'));
+                doc.font('custom');
 
                 const buffers = [];
                 doc.on('data', buffers.push.bind(buffers));
                 doc.on('end', () => {
                     const pdfBuffer = Buffer.concat(buffers);
+                    
+                    // Расширенная проверка буфера
+                    this._validatePdfBuffer(pdfBuffer);
+                    
                     console.log(`✅ PDF сгенерирован, размер: ${pdfBuffer.length} байт`);
+                    console.log(`🔐 Контрольная сумма PDF: ${this._calculateBufferHash(pdfBuffer)}`);
+                    
                     resolve(pdfBuffer);
                 });
 
-                // Установка кириллического шрифта
-                const fontPath = path.join(__dirname, '..', '..', '..', 'fonts', 'DejaVuSans.ttf');
-                if (fs.existsSync(fontPath)) {
-                    doc.registerFont('custom', fontPath);
-                    doc.font('custom');
-                }
+                // Добавляем страницы явно
+                doc.addPage();
 
                 // Титульная страница
                 this._createTitlePage(doc, reportData);
@@ -55,9 +62,43 @@ class PdfReportBuilder {
                 doc.end();
             } catch (error) {
                 console.error('❌ Ошибка при создании PDF:', error);
+                console.error('Стек ошибки:', error.stack);
                 reject(error);
             }
         });
+    }
+
+    /**
+     * Проверка корректности PDF буфера
+     * 
+     * @param {Buffer} pdfBuffer - Буфер PDF документа
+     * @throws {Error} Если буфер некорректен
+     */
+    _validatePdfBuffer(pdfBuffer) {
+        if (!pdfBuffer || pdfBuffer.length === 0) {
+            throw new Error('PDF буфер пуст');
+        }
+
+        // Проверка PDF сигнатуры
+        const pdfSignature = pdfBuffer.slice(0, 4).toString('ascii');
+        if (pdfSignature !== '%PDF') {
+            throw new Error(`Некорректная сигнатура PDF: ${pdfSignature}`);
+        }
+
+        // Дополнительные проверки
+        if (pdfBuffer.length < 1024) {
+            console.warn(`⚠️ Подозрительно малый размер PDF: ${pdfBuffer.length} байт`);
+        }
+    }
+
+    /**
+     * Вычисление хеша буфера для проверки целостности
+     * 
+     * @param {Buffer} buffer - Буфер для хеширования
+     * @returns {string} Хеш буфера
+     */
+    _calculateBufferHash(buffer) {
+        return crypto.createHash('md5').update(buffer).digest('hex');
     }
 
     /**
@@ -69,20 +110,24 @@ class PdfReportBuilder {
     _createTitlePage(doc, reportData) {
         const { summary } = reportData;
 
-        doc.fontSize(24)
-           .text('Отчёт по рекламной кампании', { align: 'center' })
-           .moveDown();
+        doc
+            .fontSize(24)
+            .text('Отчёт по рекламной кампании', { align: 'center' })
+            .moveDown();
 
-        doc.fontSize(16)
-           .text(`Кампания: ${summary.campaign_name || 'Без названия'}`, { align: 'center' })
-           .moveDown();
+        doc
+            .fontSize(16)
+            .text(`Кампания: ${summary.campaign_name || 'Без названия'}`, { align: 'center' })
+            .moveDown();
 
-        doc.fontSize(12)
-           .text(`Период: ${summary.from_date || ''} - ${summary.to_date || ''}`, { align: 'center' })
-           .moveDown(2);
+        doc
+            .fontSize(12)
+            .text(`Период: ${summary.from_date || ''} - ${summary.to_date || ''}`, { align: 'center' })
+            .moveDown(2);
 
-        doc.fontSize(10)
-           .text('Order Master Analytics', { align: 'center', color: 'gray' });
+        doc
+            .fontSize(10)
+            .text('Order Master Analytics', { align: 'center', color: 'gray' });
     }
 
     /**
@@ -178,6 +223,21 @@ class PdfReportBuilder {
         } else {
             console.warn('❗ Не удалось создать столбчатый график конверсий');
             doc.text('Не удалось создать график конверсий', { align: 'center' });
+        }
+    }
+
+    /**
+     * Сохранить PDF для отладки
+     * 
+     * @param {Buffer} pdfBuffer - Буфер PDF документа
+     */
+    _saveDebugPdf(pdfBuffer) {
+        const debugPath = path.join(__dirname, 'debug_report.pdf');
+        try {
+            fs.writeFileSync(debugPath, pdfBuffer);
+            console.log(`💾 PDF сохранен для отладки: ${debugPath}`);
+        } catch (error) {
+            console.error('❌ Ошибка сохранения PDF:', error);
         }
     }
 }

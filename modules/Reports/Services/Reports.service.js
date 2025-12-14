@@ -1,4 +1,4 @@
-const PdfReportBuilder = require('../Builders/PdfReportBuilder');
+const PdfReportBuilder = require('../Builders/PuppeteerPdfReportBuilder');
 const ExcelReportBuilder = require('../Builders/ExcelReportBuilder');
 const ReportsDataService = require('./ReportsDataService');
 
@@ -51,6 +51,7 @@ class ReportsService {
 
         } catch (error) {
             console.error('❌ Ошибка при генерации PDF:', error.message);
+            console.error('Стек ошибки:', error.stack);
             throw error;
         }
     }

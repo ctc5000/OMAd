@@ -64,12 +64,32 @@ class ReportsController {
             // Вызвать сервис для генерации PDF
             const pdfBuffer = await this.reportsService.generatePdfReport(id, from, to);
 
-            // Отправить файл клиенту
-            res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename="report_campaign_${id}.pdf"`);
+            // Проверка PDF буфера
+            if (!pdfBuffer || pdfBuffer.length === 0) {
+                console.error('❌ Пустой PDF буфер');
+                return res.status(500).json({
+                    success: false,
+                    error: 'Не удалось сгенерировать PDF'
+                });
+            }
+
+            // Проверка сигнатуры PDF
+            const pdfSignature = pdfBuffer.slice(0, 5).toString('ascii');
+            if (pdfSignature !== '%PDF-') {
+                console.error(`❌ Некорректная сигнатура PDF: ${pdfSignature}`);
+                return res.status(500).json({
+                    success: false,
+                    error: 'Некорректный формат PDF'
+                });
+            }
+
+            // Отправить файл клиенту с корректными заголовками
+            res.contentType('application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="report_campaign_${id}_${from}_to_${to}.pdf"`);
+            res.setHeader('Content-Length', pdfBuffer.length);
             res.send(pdfBuffer);
 
-            console.log(`✅ PDF отчёт отправлен клиенту`);
+            console.log(`✅ PDF отчёт отправлен клиенту, размер: ${pdfBuffer.length} байт`);
 
         } catch (error) {
             console.error('❌ Ошибка генерации PDF отчёта:', error.message);
