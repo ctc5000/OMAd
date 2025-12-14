@@ -350,6 +350,33 @@ res.send(`
     font-size: 1.2rem;
   }
   
+  .date-range-selector {
+    display: flex;
+    justify-content: center;
+    margin: 15px 0;
+  }
+
+  .date-range-buttons {
+    display: flex;
+    gap: 10px;
+  }
+
+  .date-range-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    padding: 8px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.3s;
+    font-size: 0.9rem;
+  }
+
+  .date-range-btn:hover,
+  .date-range-btn.active {
+    background: rgba(255, 255, 255, 0.4);
+  }
+  
   @media (max-width: 768px) {
     .charts-grid {
       grid-template-columns: 1fr;
@@ -397,6 +424,16 @@ res.send(`
     <div class="reports-title">
       <i class="fas fa-file-export"></i> Экспорт отчётов (MVP Тест)
     </div>
+    
+    <!-- Новый блок выбора диапазона дат -->
+    <div class="date-range-selector">
+      <div class="date-range-buttons">
+        <button class="date-range-btn active" data-period="today">Сегодня</button>
+        <button class="date-range-btn" data-period="this_week">Неделя</button>
+        <button class="date-range-btn" data-period="this_month">Месяц</button>
+      </div>
+    </div>
+    
     <div class="reports-buttons">
       <button class="report-btn pdf" id="generate-pdf-btn" onclick="generateReport('pdf')">
         <i class="fas fa-file-pdf"></i> Скачать PDF
@@ -408,7 +445,7 @@ res.send(`
      <div class="reports-info">
        <i class="fas fa-info-circle"></i> 
        Кликните на строку в таблице кампаний ниже, чтобы выбрать кампанию для отчёта (или будет использована первая кампания по умолчанию).
-       Период: последние 7 дней.
+       Период: выберите диапазон дат.
      </div>
   </div>
   
@@ -661,28 +698,27 @@ res.send(`
     console.log('✅ Выбрана кампания: ' + campaignId);
   }
 
+  // Глобальная переменная для хранения выбранного периода
+  var selectedPeriod = 'today';
+
   // Функция для генерации отчёта
-  async function generateReport(format) {
-    const btnId = 'generate-' + format + '-btn';
-    const btn = document.getElementById(btnId);
+  function generateReport(format) {
+    var btnId = 'generate-' + format + '-btn';
+    var btn = document.getElementById(btnId);
     btn.disabled = true;
     btn.classList.add('report-btn-loading');
     
-    try {
-      // Получить ID кампании
-      let campaignId = selectedCampaignId;
+    function handleReportGeneration() {
+      var campaignId = selectedCampaignId;
       
-      // Если кампания не выбрана, попробовать взять первую из таблицы
       if (!campaignId) {
-        const firstCampaignRow = document.querySelector('tr[data-campaign-id]');
+        var firstCampaignRow = document.querySelector('tr[data-campaign-id]');
         if (firstCampaignRow) {
           campaignId = firstCampaignRow.getAttribute('data-campaign-id');
-          // Автоматически выбрать первую кампанию
           selectCampaign(campaignId);
         }
       }
       
-      // Если всё ещё нет ID, попросить ввести
       if (!campaignId) {
         campaignId = prompt('Введите ID кампании:');
       }
@@ -694,48 +730,68 @@ res.send(`
         return;
       }
 
-      // Вычислить дату начала (7 дней назад)
-      const today = new Date();
-      const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-      
-      const fromDate = sevenDaysAgo.toISOString().split('T')[0];
-      const toDate = today.toISOString().split('T')[0];
-
-      const url = '/api/reports/campaign/' + campaignId + '/' + format + '?from=' + fromDate + '&to=' + toDate;
+      var url = '/api/reports/campaign/' + campaignId + '/' + format + '?period=' + selectedPeriod;
       
       console.log('📥 Загрузка ' + format.toUpperCase() + ' отчёта...');
       console.log('   URL: ' + url);
-      console.log('   Период: ' + fromDate + ' - ' + toDate);
+      console.log('   Период: ' + selectedPeriod);
 
-      // Загрузить файл
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Ошибка ' + response.status + ': ' + response.statusText);
-      }
+      fetch(url)
+        .then(function(response) {
+          if (!response.ok) {
+            return response.json().then(function(errorData) {
+              throw new Error(errorData.error || 'Ошибка ' + response.status + ': ' + response.statusText);
+            });
+          }
+          return response.blob();
+        })
+        .then(function(blob) {
+          var downloadUrl = window.URL.createObjectURL(blob);
+          var link = document.createElement('a');
+          link.href = downloadUrl;
+          
+          var today = new Date();
+          var todayStr = today.toISOString().split('T')[0];
+          link.download = 'report_campaign_' + campaignId + '_' + selectedPeriod + '_' + todayStr + '.' + (format === 'pdf' ? 'pdf' : 'xlsx');
+          
+          document.body.appendChild(link);
+          link.click();
+          window.URL.revokeObjectURL(downloadUrl);
+          document.body.removeChild(link);
 
-      // Получить blob
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = 'report_campaign_' + campaignId + '_' + fromDate + '_to_' + toDate + '.' + (format === 'pdf' ? 'pdf' : 'xlsx');
-      document.body.appendChild(link);
-      link.click();
-      window.URL.revokeObjectURL(downloadUrl);
-      document.body.removeChild(link);
-
-      console.log('✅ Отчёт успешно загружен!');
-      alert('✅ Отчёт ' + format.toUpperCase() + ' для кампании ' + campaignId + ' успешно загружен!');
-    } catch (error) {
-      console.error('❌ Ошибка при генерации ' + format.toUpperCase() + ' отчёта:', error);
-      alert('❌ Ошибка: ' + error.message);
-    } finally {
-      btn.disabled = false;
-      btn.classList.remove('report-btn-loading');
+          console.log('✅ Отчёт успешно загружен!');
+          alert('✅ Отчёт ' + format.toUpperCase() + ' для кампании ' + campaignId + ' за период "' + selectedPeriod + '" успешно загружен!');
+        })
+        .catch(function(error) {
+          console.error('❌ Ошибка при генерации ' + format.toUpperCase() + ' отчёта:', error);
+          alert('❌ Ошибка: ' + error.message);
+        })
+        .finally(function() {
+          btn.disabled = false;
+          btn.classList.remove('report-btn-loading');
+        });
     }
+
+    handleReportGeneration();
   }
+
+  // Обработчики кнопок периода
+  document.addEventListener('DOMContentLoaded', function() {
+    var dateRangeBtns = document.querySelectorAll('.date-range-btn');
+    
+    dateRangeBtns.forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        dateRangeBtns.forEach(function(b) {
+          b.classList.remove('active');
+        });
+        
+        this.classList.add('active');
+        selectedPeriod = this.dataset.period;
+        
+        console.log('✅ Выбран период: ' + selectedPeriod);
+      });
+    });
+  });
 </script>
 </body>
 </html>
