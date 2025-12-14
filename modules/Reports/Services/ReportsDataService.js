@@ -154,6 +154,9 @@ class ReportsDataService {
             const cpuv = campaign.cost_per_uv !== null ? parseFloat(campaign.cost_per_uv) : null;
 
             const metrics = {
+                campaign_name: campaign.name,
+                from_date: fromDate,
+                to_date: toDate,
                 uv,
                 impressions,
                 reach,
@@ -163,7 +166,8 @@ class ReportsDataService {
                 cr,
                 cpc,
                 cpl,
-                cpuv
+                cpuv,
+                revenue: conversions * (cpl || 0) // Примерный расчет выручки
             };
 
             console.log(`✅ Сводные метрики получены:`, metrics);
@@ -620,7 +624,9 @@ class ReportsDataService {
                 date: dateStr,
                 impressions: 0,
                 clicks: 0,
-                conversions: 0
+                conversions: 0,
+                ctr: 0,
+                cr: 0
             };
         }
 
@@ -646,6 +652,19 @@ class ReportsDataService {
             if (dailyMap[dateStr]) {
                 dailyMap[dateStr].conversions = parseInt(row.conversions || 0, 10);
             }
+        });
+
+        // Рассчитать CTR и CR
+        Object.values(dailyMap).forEach(day => {
+            // CTR = (clicks / impressions) * 100
+            day.ctr = day.impressions > 0 
+                ? parseFloat(((day.clicks / day.impressions) * 100).toFixed(2)) 
+                : 0;
+
+            // CR = (conversions / clicks) * 100
+            day.cr = day.clicks > 0 
+                ? parseFloat(((day.conversions / day.clicks) * 100).toFixed(2)) 
+                : 0;
         });
 
         // Вернуть отсортированный массив

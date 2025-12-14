@@ -1,143 +1,156 @@
 const ExcelJS = require('exceljs');
 
-/**
- * Построитель Excel отчётов
- * Генерирует простой Excel с листами Summary и Daily Metrics
- */
 class ExcelReportBuilder {
-    constructor() {
-        this.ExcelJS = ExcelJS;
-    }
-
     /**
-     * Построить Excel отчёт из данных
+     * Построить Excel отчёт
      * 
-     * Входные данные:
-     * {
-     *   summary: { uv, reach, impressions, clicks, conversions, ctr, cr, cpc, cpl },
-     *   daily: [{ date, impressions, clicks, conversions }, ...]
-     * }
+     * @param {object} reportData - Данные для отчёта
+     * @returns {Promise<Buffer>} - Excel документ в виде Buffer
      */
     async build(reportData) {
-        console.log('🔨 Построение Excel отчёта');
+        const workbook = new ExcelJS.Workbook();
+        
+        // Титульный лист
+        this._createTitleSheet(workbook, reportData);
 
-        try {
-            // Валидация входных данных
-            if (!reportData || !reportData.summary) {
-                throw new Error('Invalid report data: missing summary');
-            }
+        // Лист с основными метриками
+        this._createSummarySheet(workbook, reportData);
 
-            // Создать новый Workbook
-            const workbook = new this.ExcelJS.Workbook();
+        // Лист с ежедневной статистикой
+        this._createDailyMetricsSheet(workbook, reportData);
 
-            // Добавить лист со сводкой
-            this.addSummarySheet(workbook, reportData.summary);
-
-            // Добавить лист с ежедневными метриками
-            if (reportData.daily && reportData.daily.length > 0) {
-                this.addDailyMetricsSheet(workbook, reportData.daily);
-            }
-
-            // Сформировать буфер и вернуть
-            const buffer = await workbook.xlsx.writeBuffer();
-            console.log(`✅ Excel отчёт успешно сгенерирован (размер: ${buffer.length} байт)`);
-            return buffer;
-
-        } catch (error) {
-            console.error('❌ Ошибка при построении Excel:', error.message);
-            throw error;
-        }
+        // Сохранить в буфер
+        return await workbook.xlsx.writeBuffer();
     }
 
     /**
-     * Добавить лист со сводкой метрик
+     * Создать титульный лист
+     * 
+     * @param {ExcelJS.Workbook} workbook - Рабочая книга
+     * @param {object} reportData - Данные для отчёта
      */
-    addSummarySheet(workbook, summary) {
-        console.log('📊 Добавление листа сводки');
+    _createTitleSheet(workbook, reportData) {
+        const { summary } = reportData;
+        const sheet = workbook.addWorksheet('Титульный лист');
 
-        const worksheet = workbook.addWorksheet('Summary');
+        // Стили
+        const titleStyle = { 
+            font: { bold: true, size: 16 },
+            alignment: { horizontal: 'center' }
+        };
+        const subtitleStyle = { 
+            font: { size: 12 },
+            alignment: { horizontal: 'center' }
+        };
 
-        // Установить ширину колонок
-        worksheet.columns = [
-            { header: 'Метрика', key: 'metric', width: 20 },
-            { header: 'Значение', key: 'value', width: 20 }
-        ];
+        sheet.mergeCells('A1:D1');
+        sheet.getCell('A1').value = 'Отчёт по рекламной кампании';
+        sheet.getCell('A1').style = titleStyle;
 
-        // Заполнить данные
-        const metricsData = [
-            { metric: 'UV', value: summary.uv || 0 },
-            { metric: 'Reach', value: summary.reach || 0 },
-            { metric: 'Impressions', value: summary.impressions || 0 },
-            { metric: 'Clicks', value: summary.clicks || 0 },
-            { metric: 'Conversions', value: summary.conversions || 0 },
-            { metric: 'CTR, %', value: summary.ctr !== undefined ? summary.ctr : 0 },
-            { metric: 'CR, %', value: summary.cr !== undefined ? summary.cr : 0 },
-            { metric: 'CPC, ₽', value: summary.cpc !== null ? summary.cpc : '—' },
-            { metric: 'CPL, ₽', value: summary.cpl !== null ? summary.cpl : '—' },
-        ];
+        sheet.mergeCells('A3:D3');
+        sheet.getCell('A3').value = `Кампания: ${summary.campaign_name || 'Без названия'}`;
+        sheet.getCell('A3').style = subtitleStyle;
 
-        worksheet.addRows(metricsData);
+        sheet.mergeCells('A4:D4');
+        sheet.getCell('A4').value = `Период: ${summary.from_date || ''} - ${summary.to_date || ''}`;
+        sheet.getCell('A4').style = subtitleStyle;
 
-        // Форматировать заголовок
-        const headerRow = worksheet.getRow(1);
-        headerRow.font = { bold: true };
-        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD3D3D3' } };
-        headerRow.alignment = { horizontal: 'center', vertical: 'center' };
-
-        // Форматировать ячейки со значениями
-        worksheet.eachRow((row, rowNumber) => {
-            if (rowNumber > 1) {
-                row.alignment = { horizontal: 'right', vertical: 'center' };
-            }
+        // Автоширина столбцов
+        sheet.columns.forEach(column => {
+            column.width = 20;
         });
     }
 
     /**
-     * Добавить лист с ежедневными метриками
+     * Создать лист с основными метриками
+     * 
+     * @param {ExcelJS.Workbook} workbook - Рабочая книга
+     * @param {object} reportData - Данные для отчёта
      */
-    addDailyMetricsSheet(workbook, dailyData) {
-        console.log('📋 Добавление листа ежедневных метрик');
+    _createSummarySheet(workbook, reportData) {
+        const { summary } = reportData;
+        const sheet = workbook.addWorksheet('Основные метрики');
 
-        const worksheet = workbook.addWorksheet('Daily Metrics');
-
-        // Установить ширину колонок
-        worksheet.columns = [
-            { header: 'Дата', key: 'date', width: 15 },
-            { header: 'Impressions', key: 'impressions', width: 15 },
-            { header: 'Clicks', key: 'clicks', width: 15 },
-            { header: 'Conversions', key: 'conversions', width: 15 }
+        // Заголовки
+        sheet.columns = [
+            { header: 'Метрика', key: 'metric', width: 25 },
+            { header: 'Значение', key: 'value', width: 20 }
         ];
 
-        // Подготовить данные для таблицы
-        const rows = dailyData.map(item => ({
-            date: item.date,
-            impressions: item.impressions || 0,
-            clicks: item.clicks || 0,
-            conversions: item.conversions || 0
+        // Данные
+        const metrics = [
+            { metric: 'Уникальные посетители (UV)', value: summary.uv || 0 },
+            { metric: 'Показы', value: summary.impressions || 0 },
+            { metric: 'Клики', value: summary.clicks || 0 },
+            { metric: 'CTR', value: summary.ctr ? `${summary.ctr}%` : '0%' },
+            { metric: 'Конверсии', value: summary.conversions || 0 },
+            { metric: 'CR', value: summary.cr ? `${summary.cr}%` : '0%' },
+            { metric: 'Выручка', value: summary.revenue ? `${summary.revenue.toFixed(2)} ₽` : '0 ₽' }
+        ];
+
+        // Добавить данные
+        sheet.addRows(metrics);
+
+        // Стили
+        sheet.getRow(1).font = { bold: true };
+        sheet.eachRow((row, rowNumber) => {
+            row.eachCell(cell => {
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' }
+                };
+                cell.alignment = { horizontal: 'left' };
+            });
+        });
+    }
+
+    /**
+     * Создать лист с ежедневной статистикой
+     * 
+     * @param {ExcelJS.Workbook} workbook - Рабочая книга
+     * @param {object} reportData - Данные для отчёта
+     */
+    _createDailyMetricsSheet(workbook, reportData) {
+        const { daily } = reportData;
+        const sheet = workbook.addWorksheet('Ежедневная статистика');
+
+        // Заголовки
+        sheet.columns = [
+            { header: 'Дата', key: 'date', width: 15 },
+            { header: 'Показы', key: 'impressions', width: 15 },
+            { header: 'Клики', key: 'clicks', width: 15 },
+            { header: 'CTR', key: 'ctr', width: 15 },
+            { header: 'Конверсии', key: 'conversions', width: 15 },
+            { header: 'CR', key: 'cr', width: 15 }
+        ];
+
+        // Преобразовать данные
+        const dailyMetrics = daily.map(day => ({
+            date: day.date,
+            impressions: day.impressions || 0,
+            clicks: day.clicks || 0,
+            ctr: day.ctr !== undefined ? `${day.ctr}%` : '0%',
+            conversions: day.conversions || 0,
+            cr: day.cr !== undefined ? `${day.cr}%` : '0%'
         }));
 
-        worksheet.addRows(rows);
+        // Добавить данные
+        sheet.addRows(dailyMetrics);
 
-        // Форматировать заголовок
-        const headerRow = worksheet.getRow(1);
-        headerRow.font = { bold: true };
-        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD3D3D3' } };
-        headerRow.alignment = { horizontal: 'center', vertical: 'center' };
-
-        // Форматировать ячейки данных
-        worksheet.eachRow((row, rowNumber) => {
-            if (rowNumber > 1) {
-                row.cells.forEach((cell, index) => {
-                    if (index > 0) {
-                        // Числовое форматирование для колонок с метриками
-                        cell.numFmt = '#,##0';
-                        cell.alignment = { horizontal: 'right', vertical: 'center' };
-                    } else {
-                        // Выравнивание по центру для даты
-                        cell.alignment = { horizontal: 'center', vertical: 'center' };
-                    }
-                });
-            }
+        // Стили
+        sheet.getRow(1).font = { bold: true };
+        sheet.eachRow((row, rowNumber) => {
+            row.eachCell(cell => {
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' }
+                };
+                cell.alignment = { horizontal: 'left' };
+            });
         });
     }
 }

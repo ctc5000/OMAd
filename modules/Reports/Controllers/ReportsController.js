@@ -2,6 +2,10 @@ const ReportsService = require('../Services/Reports.service');
 
 class ReportsController {
     constructor(models, sequelize) {
+        console.log('🚀 Инициализация ReportsController');
+        console.log('📦 Доступные модели:', Object.keys(models));
+        console.log('📊 Sequelize:', !!sequelize);
+
         this.models = models;
         this.sequelize = sequelize;
         
@@ -18,6 +22,13 @@ class ReportsController {
      */
     async generatePdfReport(req, res) {
         try {
+            console.log('🔍 Полный запрос PDF:', {
+                params: req.params,
+                query: req.query,
+                body: req.body,
+                headers: req.headers
+            });
+
             const { id } = req.params;
             const { from, to } = req.query;
 
@@ -25,6 +36,7 @@ class ReportsController {
 
             // Валидация параметров
             if (!id) {
+                console.warn('❌ Отсутствует campaign_id');
                 return res.status(400).json({
                     success: false,
                     error: 'Требуется campaign_id в URL'
@@ -32,9 +44,20 @@ class ReportsController {
             }
 
             if (!from || !to) {
+                console.warn('❌ Отсутствуют параметры from и to');
                 return res.status(400).json({
                     success: false,
                     error: 'Требуются параметры from и to (формат: YYYY-MM-DD)'
+                });
+            }
+
+            // Проверка существования кампании
+            const campaign = await this.models.Campaign.findByPk(id);
+            if (!campaign) {
+                console.warn(`❌ Кампания ${id} не найдена`);
+                return res.status(404).json({
+                    success: false,
+                    error: `Кампания ${id} не найдена`
                 });
             }
 
@@ -50,6 +73,7 @@ class ReportsController {
 
         } catch (error) {
             console.error('❌ Ошибка генерации PDF отчёта:', error.message);
+            console.error('Стек ошибки:', error.stack);
             return res.status(500).json({
                 success: false,
                 error: error.message
@@ -66,6 +90,13 @@ class ReportsController {
      */
     async generateExcelReport(req, res) {
         try {
+            console.log('🔍 Полный запрос Excel:', {
+                params: req.params,
+                query: req.query,
+                body: req.body,
+                headers: req.headers
+            });
+
             const { id } = req.params;
             const { from, to } = req.query;
 
@@ -73,6 +104,7 @@ class ReportsController {
 
             // Валидация параметров
             if (!id) {
+                console.warn('❌ Отсутствует campaign_id');
                 return res.status(400).json({
                     success: false,
                     error: 'Требуется campaign_id в URL'
@@ -80,9 +112,20 @@ class ReportsController {
             }
 
             if (!from || !to) {
+                console.warn('❌ Отсутствуют параметры from и to');
                 return res.status(400).json({
                     success: false,
                     error: 'Требуются параметры from и to (формат: YYYY-MM-DD)'
+                });
+            }
+
+            // Проверка существования кампании
+            const campaign = await this.models.Campaign.findByPk(id);
+            if (!campaign) {
+                console.warn(`❌ Кампания ${id} не найдена`);
+                return res.status(404).json({
+                    success: false,
+                    error: `Кампания ${id} не найдена`
                 });
             }
 
@@ -98,6 +141,7 @@ class ReportsController {
 
         } catch (error) {
             console.error('❌ Ошибка генерации Excel отчёта:', error.message);
+            console.error('Стек ошибки:', error.stack);
             return res.status(500).json({
                 success: false,
                 error: error.message

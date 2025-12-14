@@ -1,185 +1,183 @@
 const PDFDocument = require('pdfkit');
-const { ChartJSNodeCanvas } = require('chartjs-node-canvas');
+const { createLineChart, createBarChart } = require('./chartGenerator');
+const fs = require('fs');
+const path = require('path');
 
-/**
- * Построитель PDF отчётов
- * Генерирует минимальный рабочий PDF с таблицей метрик и графиком
- */
 class PdfReportBuilder {
-    constructor() {
-        this.PDFDocument = PDFDocument;
-        this.chartJSNodeCanvas = new ChartJSNodeCanvas({ width: 800, height: 400, backgroundColour: 'white' });
-    }
-
     /**
-     * Построить PDF отчёт из данных
+     * Построить PDF отчёт
      * 
-     * Входные данные:
-     * {
-     *   summary: { uv, reach, impressions, clicks, conversions, ctr, cr, cpc, cpl },
-     *   daily: [{ date, impressions, clicks, conversions }, ...]
-     * }
+     * @param {object} reportData - Данные для отчёта
+     * @returns {Promise<Buffer>} - PDF документ в виде Buffer
      */
     async build(reportData) {
-        console.log('🔨 Построение PDF отчёта');
+        return new Promise((resolve, reject) => {
+            try {
+                console.log('🚀 Начало генерации PDF отчёта');
+                console.log('📊 Входные данные:', JSON.stringify(reportData, null, 2));
 
-        try {
-            // Валидация входных данных
-            if (!reportData || !reportData.summary) {
-                throw new Error('Invalid report data: missing summary');
-            }
-
-            const doc = new this.PDFDocument();
-            const buffers = [];
-            doc.on('data', chunk => buffers.push(chunk));
-
-            // Добавить заголовок
-            this.addTitle(doc, 'Отчет по кампании');
-
-            // Добавить таблицу основных метрик
-            this.addMetricsSummary(doc, reportData.summary);
-
-            // Добавить график ежедневных показов
-            if (reportData.daily && reportData.daily.length > 0) {
-                await this.addDailyMetricsChart(doc, reportData.daily);
-            }
-
-            // Завершить документ
-            doc.end();
-
-            // Собрать буфер и вернуть
-            const pdfBuffer = Buffer.concat(buffers);
-            console.log(`✅ PDF отчёт успешно сгенерирован (размер: ${pdfBuffer.length} байт)`);
-            return pdfBuffer;
-
-        } catch (error) {
-            console.error('❌ Ошибка при построении PDF:', error.message);
-            throw error;
-        }
-    }
-
-    /**
-     * Добавить заголовок
-     */
-    addTitle(doc, title) {
-        console.log('📄 Добавление заголовка');
-        doc.fontSize(24).font('Helvetica-Bold').text(title, { align: 'center' });
-        doc.fontSize(12).font('Helvetica').text(`Дата: ${new Date().toLocaleDateString('ru-RU')}`, { align: 'center' });
-        doc.moveDown();
-    }
-
-    /**
-     * Добавить таблицу основных метрик
-     */
-    addMetricsSummary(doc, summary) {
-        console.log('📊 Добавление таблицы метрик');
-        
-        doc.fontSize(14).font('Helvetica-Bold').text('Основные метрики:', { underline: true });
-        doc.moveDown(0.5);
-
-        const metrics = [
-            ['UV', summary.uv ? summary.uv.toLocaleString('ru-RU') : '—'],
-            ['Reach', summary.reach ? summary.reach.toLocaleString('ru-RU') : '—'],
-            ['Impressions', summary.impressions ? summary.impressions.toLocaleString('ru-RU') : '—'],
-            ['Clicks', summary.clicks ? summary.clicks.toLocaleString('ru-RU') : '—'],
-            ['Conversions', summary.conversions ? summary.conversions.toLocaleString('ru-RU') : '—'],
-            ['CTR', summary.ctr !== undefined ? `${summary.ctr}%` : '—'],
-            ['CR', summary.cr !== undefined ? `${summary.cr}%` : '—'],
-            ['CPC', summary.cpc !== null ? `${summary.cpc.toFixed(2)} ₽` : '—'],
-            ['CPL', summary.cpl !== null ? `${summary.cpl.toFixed(2)} ₽` : '—'],
-        ];
-
-        doc.fontSize(11).font('Helvetica');
-        const startX = 50;
-        const labelWidth = 100;
-        const valueWidth = 100;
-        let currentY = doc.y;
-
-        // Заголовки таблицы
-        doc.font('Helvetica-Bold');
-        doc.text('Метрика', startX, currentY);
-        doc.text('Значение', startX + labelWidth, currentY);
-        currentY += 20;
-
-        // Строки таблицы
-        doc.font('Helvetica');
-        for (const [label, value] of metrics) {
-            doc.text(label, startX, currentY);
-            doc.text(value, startX + labelWidth, currentY);
-            currentY += 18;
-        }
-
-        doc.moveDown();
-    }
-
-    /**
-     * Добавить график ежедневных показов
-     */
-    async addDailyMetricsChart(doc, dailyData) {
-        console.log('📈 Добавление графика ежедневных метрик');
-
-        try {
-            // Подготовить данные для графика
-            const labels = dailyData.map(d => d.date);
-            const impressionsData = dailyData.map(d => d.impressions || 0);
-            const clicksData = dailyData.map(d => d.clicks || 0);
-
-            const chartConfig = {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Impressions',
-                            data: impressionsData,
-                            borderColor: '#36A2EB',
-                            backgroundColor: 'rgba(54, 162, 235, 0.1)',
-                            borderWidth: 2,
-                            tension: 0.3
-                        },
-                        {
-                            label: 'Clicks',
-                            data: clicksData,
-                            borderColor: '#FF6384',
-                            backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                            borderWidth: 2,
-                            tension: 0.3
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Ежедневные показы и клики'
-                        },
-                        legend: {
-                            display: true
-                        }
+                const doc = new PDFDocument({ 
+                    size: 'A4', 
+                    margins: { 
+                        top: 50, 
+                        bottom: 50, 
+                        left: 50, 
+                        right: 50 
                     },
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
+                    bufferPages: true,  // Важно для корректной работы с буфером
+                    font: 'Helvetica'   // Используем стандартный шрифт
+                });
+
+                const buffers = [];
+                doc.on('data', buffers.push.bind(buffers));
+                doc.on('end', () => {
+                    const pdfBuffer = Buffer.concat(buffers);
+                    console.log(`✅ PDF сгенерирован, размер: ${pdfBuffer.length} байт`);
+                    resolve(pdfBuffer);
+                });
+
+                // Установка кириллического шрифта
+                const fontPath = path.join(__dirname, '..', '..', '..', 'fonts', 'DejaVuSans.ttf');
+                if (fs.existsSync(fontPath)) {
+                    doc.registerFont('custom', fontPath);
+                    doc.font('custom');
                 }
-            };
 
-            // Сгенерировать график
-            const chartImage = await this.chartJSNodeCanvas.drawChart(chartConfig);
+                // Титульная страница
+                this._createTitlePage(doc, reportData);
 
-            // Добавить заголовок графика
-            doc.fontSize(14).font('Helvetica-Bold').text('Динамика метрик по дням:', { underline: true });
-            doc.moveDown(0.5);
+                // Страница с основными метриками
+                this._createSummaryPage(doc, reportData);
 
-            // Вставить график в PDF
-            doc.image(chartImage, 50, doc.y, { width: 500, height: 250 });
-            doc.moveDown(12);
+                // Страница с графиками
+                this._createChartsPage(doc, reportData);
 
-        } catch (error) {
-            console.warn('⚠️ Ошибка при генерации графика, продолжаем без графика:', error.message);
-            // Продолжаем без графика
+                doc.end();
+            } catch (error) {
+                console.error('❌ Ошибка при создании PDF:', error);
+                reject(error);
+            }
+        });
+    }
+
+    /**
+     * Создать титульную страницу
+     * 
+     * @param {PDFDocument} doc - Документ PDFKit
+     * @param {object} reportData - Данные для отчёта
+     */
+    _createTitlePage(doc, reportData) {
+        const { summary } = reportData;
+
+        doc.fontSize(24)
+           .text('Отчёт по рекламной кампании', { align: 'center' })
+           .moveDown();
+
+        doc.fontSize(16)
+           .text(`Кампания: ${summary.campaign_name || 'Без названия'}`, { align: 'center' })
+           .moveDown();
+
+        doc.fontSize(12)
+           .text(`Период: ${summary.from_date || ''} - ${summary.to_date || ''}`, { align: 'center' })
+           .moveDown(2);
+
+        doc.fontSize(10)
+           .text('Order Master Analytics', { align: 'center', color: 'gray' });
+    }
+
+    /**
+     * Создать страницу с основными метриками
+     * 
+     * @param {PDFDocument} doc - Документ PDFKit
+     * @param {object} reportData - Данные для отчёта
+     */
+    _createSummaryPage(doc, reportData) {
+        const { summary } = reportData;
+
+        doc.addPage()
+           .fontSize(16)
+           .text('Основные метрики', { underline: true });
+
+        doc.fontSize(12)
+           .moveDown()
+           .text(`Уникальные посетители: ${summary.uv || 0}`)
+           .text(`Показы: ${summary.impressions || 0}`)
+           .text(`Клики: ${summary.clicks || 0}`)
+           .text(`CTR: ${summary.ctr || 0}%`)
+           .text(`Конверсии: ${summary.conversions || 0}`)
+           .text(`CR: ${summary.cr || 0}%`)
+           .text(`Выручка: ${summary.revenue ? summary.revenue.toFixed(2) + ' ₽' : '0 ₽'}`);
+    }
+
+    /**
+     * Создать страницу с графиками
+     * 
+     * @param {PDFDocument} doc - Документ PDFKit
+     * @param {object} reportData - Данные для отчёта
+     */
+    async _createChartsPage(doc, reportData) {
+        const { daily } = reportData;
+
+        console.log('📈 Создание страницы с графиками');
+        console.log('📊 Данные для графиков:', JSON.stringify(daily, null, 2));
+
+        doc.addPage()
+           .fontSize(16)
+           .text('Графики производительности', { underline: true });
+
+        // Линейный график кликов
+        const clicksChart = await createLineChart(
+            daily.map(d => d.date),
+            [{ 
+                label: 'Клики', 
+                data: daily.map(d => d.clicks || 0) 
+            }],
+            { 
+                title: 'Динамика кликов', 
+                xAxisTitle: 'Дата', 
+                yAxisTitle: 'Количество кликов' 
+            }
+        );
+
+        // Столбчатый график конверсий
+        const conversionsChart = await createBarChart(
+            daily.map(d => d.date),
+            [{ 
+                label: 'Конверсии', 
+                data: daily.map(d => d.conversions || 0) 
+            }],
+            { 
+                title: 'Динамика конверсий', 
+                xAxisTitle: 'Дата', 
+                yAxisTitle: 'Количество конверсий' 
+            }
+        );
+
+        // Добавить графики в PDF
+        if (clicksChart) {
+            console.log(`✅ Линейный график кликов: ${clicksChart.length} байт`);
+            doc.image(clicksChart, { 
+                fit: [500, 250], 
+                align: 'center', 
+                valign: 'center' 
+            });
+        } else {
+            console.warn('❗ Не удалось создать линейный график кликов');
+            doc.text('Не удалось создать график кликов', { align: 'center' });
+        }
+
+        doc.moveDown();
+
+        if (conversionsChart) {
+            console.log(`✅ Столбчатый график конверсий: ${conversionsChart.length} байт`);
+            doc.image(conversionsChart, { 
+                fit: [500, 250], 
+                align: 'center', 
+                valign: 'center' 
+            });
+        } else {
+            console.warn('❗ Не удалось создать столбчатый график конверсий');
+            doc.text('Не удалось создать график конверсий', { align: 'center' });
         }
     }
 }
