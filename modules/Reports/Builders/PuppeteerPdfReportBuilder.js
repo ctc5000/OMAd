@@ -1,5 +1,6 @@
 const puppeteer = require('puppeteer');
 const { createLineChart, createBarChart } = require('./chartGenerator');
+const DateUtils = require('../Utils/DateUtils');
 const fs = require('fs');
 const path = require('path');
 
@@ -8,11 +9,16 @@ class PuppeteerPdfReportBuilder {
      * Построить PDF отчёт с помощью Puppeteer
      * 
      * @param {object} reportData - Данные для отчёта
+     * @param {string} [period='this_week'] - Период отчета
      * @returns {Promise<Buffer>} - PDF документ в виде Buffer
      */
-    async build(reportData) {
+    async build(reportData, period = 'this_week') {
         console.log('🚀 Начало генерации PDF отчёта через Puppeteer');
-        console.log('📊 Входные данные:', JSON.stringify(reportData, null, 2));
+        console.log('📊 Период отчета:', period);
+
+        // Получаем диапазон дат
+        const { fromDate, toDate } = DateUtils.getDateRange(period);
+        const periodDescription = DateUtils.getPeriodDescription(period);
 
         let browser = null;
         try {
@@ -45,8 +51,15 @@ class PuppeteerPdfReportBuilder {
                 }
             );
 
-            // Генерируем HTML для PDF
-            const htmlContent = this._generateReportHtml(reportData, clicksChart, conversionsChart);
+            // Генерируем HTML для PDF с учетом периода
+            const htmlContent = this._generateReportHtml(
+                reportData, 
+                clicksChart, 
+                conversionsChart, 
+                fromDate, 
+                toDate, 
+                periodDescription
+            );
 
             // Запускаем браузер с расширенными опциями
             browser = await puppeteer.launch({ 
@@ -57,7 +70,7 @@ class PuppeteerPdfReportBuilder {
                     '--disable-gpu', 
                     '--disable-dev-shm-usage'
                 ],
-                timeout: 60000  // Увеличенный таймаут запуска
+                timeout: 60000
             });
             const page = await browser.newPage();
 
@@ -203,8 +216,16 @@ class PuppeteerPdfReportBuilder {
 
     /**
      * Генерирует HTML для отчета с упрощенным стилем
+     * 
+     * @param {object} reportData - Данные для отчёта
+     * @param {Buffer} clicksChart - Изображение графика кликов
+     * @param {Buffer} conversionsChart - Изображение графика конверсий
+     * @param {string} fromDate - Начальная дата периода
+     * @param {string} toDate - Конечная дата периода
+     * @param {string} periodDescription - Описание периода
+     * @returns {string} HTML-строка
      */
-    _generateReportHtml(reportData, clicksChart, conversionsChart) {
+    _generateReportHtml(reportData, clicksChart, conversionsChart, fromDate, toDate, periodDescription) {
         const { summary, daily } = reportData;
 
         const clicksChartBase64 = clicksChart ? `data:image/png;base64,${clicksChart.toString('base64')}` : '';
@@ -252,7 +273,7 @@ class PuppeteerPdfReportBuilder {
             
             <h2>Информация о кампании</h2>
             <p><strong>Название:</strong> ${summary.campaign_name || 'Без названия'}</p>
-            <p><strong>Период:</strong> ${summary.from_date || ''} - ${summary.to_date || ''}</p>
+            <p><strong>Период:</strong> ${fromDate} - ${toDate} (${periodDescription})</p>
 
             <h2>Основные метрики</h2>
             <table>

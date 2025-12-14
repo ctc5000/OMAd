@@ -1,4 +1,5 @@
 const ReportsService = require('../Services/Reports.service');
+const DateUtils = require('../Utils/DateUtils');
 
 class ReportsController {
     constructor(models, sequelize) {
@@ -19,6 +20,7 @@ class ReportsController {
      * Query параметры:
      * - from: дата начала (YYYY-MM-DD)
      * - to: дата окончания (YYYY-MM-DD)
+     * - period: период отчета ('today', 'yesterday', 'this_week', 'this_month')
      */
     async generatePdfReport(req, res) {
         try {
@@ -30,9 +32,9 @@ class ReportsController {
             });
 
             const { id } = req.params;
-            const { from, to } = req.query;
+            const { period = 'this_week' } = req.query;
 
-            console.log(`📄 Запрос PDF отчёта для кампании ${id}, период: ${from} - ${to}`);
+            console.log(`📄 Запрос PDF отчёта для кампании ${id}, период: ${period}`);
 
             // Валидация параметров
             if (!id) {
@@ -40,14 +42,6 @@ class ReportsController {
                 return res.status(400).json({
                     success: false,
                     error: 'Требуется campaign_id в URL'
-                });
-            }
-
-            if (!from || !to) {
-                console.warn('❌ Отсутствуют параметры from и to');
-                return res.status(400).json({
-                    success: false,
-                    error: 'Требуются параметры from и to (формат: YYYY-MM-DD)'
                 });
             }
 
@@ -62,7 +56,7 @@ class ReportsController {
             }
 
             // Вызвать сервис для генерации PDF
-            const pdfBuffer = await this.reportsService.generatePdfReport(id, from, to);
+            const pdfBuffer = await this.reportsService.generatePdfReport(id, period);
 
             // Проверка PDF буфера
             if (!pdfBuffer || pdfBuffer.length === 0) {
@@ -73,19 +67,12 @@ class ReportsController {
                 });
             }
 
-            // Проверка сигнатуры PDF
-            const pdfSignature = pdfBuffer.slice(0, 5).toString('ascii');
-            if (pdfSignature !== '%PDF-') {
-                console.error(`❌ Некорректная сигнатура PDF: ${pdfSignature}`);
-                return res.status(500).json({
-                    success: false,
-                    error: 'Некорректный формат PDF'
-                });
-            }
+            // Получаем диапазон дат для имени файла
+            const { fromDate, toDate } = DateUtils.getDateRange(period);
 
             // Отправить файл клиенту с корректными заголовками
             res.contentType('application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename="report_campaign_${id}_${from}_to_${to}.pdf"`);
+            res.setHeader('Content-Disposition', `attachment; filename="report_campaign_${id}_${fromDate}_to_${toDate}.pdf"`);
             res.setHeader('Content-Length', pdfBuffer.length);
             res.send(pdfBuffer);
 
@@ -105,8 +92,7 @@ class ReportsController {
      * Генерирует Excel отчёт по кампании
      * 
      * Query параметры:
-     * - from: дата начала (YYYY-MM-DD)
-     * - to: дата окончания (YYYY-MM-DD)
+     * - period: период отчета ('today', 'yesterday', 'this_week', 'this_month')
      */
     async generateExcelReport(req, res) {
         try {
@@ -118,9 +104,9 @@ class ReportsController {
             });
 
             const { id } = req.params;
-            const { from, to } = req.query;
+            const { period = 'this_week' } = req.query;
 
-            console.log(`📊 Запрос Excel отчёта для кампании ${id}, период: ${from} - ${to}`);
+            console.log(`📊 Запрос Excel отчёта для кампании ${id}, период: ${period}`);
 
             // Валидация параметров
             if (!id) {
@@ -128,14 +114,6 @@ class ReportsController {
                 return res.status(400).json({
                     success: false,
                     error: 'Требуется campaign_id в URL'
-                });
-            }
-
-            if (!from || !to) {
-                console.warn('❌ Отсутствуют параметры from и to');
-                return res.status(400).json({
-                    success: false,
-                    error: 'Требуются параметры from и to (формат: YYYY-MM-DD)'
                 });
             }
 
@@ -150,18 +128,21 @@ class ReportsController {
             }
 
             // Вызвать сервис для генерации Excel
-            const excelBuffer = await this.reportsService.generateExcelReport(id, from, to);
+            const excelBuffer = await this.reportsService.generateExcelReport(id, period);
+
+            // Получаем диапазон дат для имени файла
+            const { fromDate, toDate } = DateUtils.getDateRange(period);
 
             // Отправить файл клиенту
-            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            res.setHeader('Content-Disposition', `attachment; filename="report_campaign_${id}.xlsx"`);
+            res.contentType('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename="report_campaign_${id}_${fromDate}_to_${toDate}.xlsx"`);
+            res.setHeader('Content-Length', excelBuffer.length);
             res.send(excelBuffer);
 
-            console.log(`✅ Excel отчёт отправлен клиенту`);
+            console.log(`✅ Excel отчёт отправлен клиенту, размер: ${excelBuffer.length} байт`);
 
         } catch (error) {
             console.error('❌ Ошибка генерации Excel отчёта:', error.message);
-            console.error('Стек ошибки:', error.stack);
             return res.status(500).json({
                 success: false,
                 error: error.message

@@ -1,6 +1,7 @@
 const PdfReportBuilder = require('../Builders/PuppeteerPdfReportBuilder');
 const ExcelReportBuilder = require('../Builders/ExcelReportBuilder');
 const ReportsDataService = require('./ReportsDataService');
+const DateUtils = require('../Utils/DateUtils');
 
 /**
  * Сервис для генерации отчётов
@@ -21,18 +22,15 @@ class ReportsService {
      * Генерирует PDF отчёт по кампании
      * 
      * @param {number} campaignId - ID кампании
-     * @param {string} fromDate - Дата начала периода (YYYY-MM-DD)
-     * @param {string} toDate - Дата окончания периода (YYYY-MM-DD)
+     * @param {string} [period='this_week'] - Период отчета
      * @returns {Promise<Buffer>} - PDF документ в виде Buffer
      */
-    async generatePdfReport(campaignId, fromDate, toDate) {
-        console.log(`📄 Генерация PDF отчёта: кампания ${campaignId}, ${fromDate} - ${toDate}`);
+    async generatePdfReport(campaignId, period = 'this_week') {
+        console.log(`📄 Генерация PDF отчёта: кампания ${campaignId}, период: ${period}`);
 
         try {
-            // Валидация даты
-            if (!fromDate || !toDate) {
-                throw new Error('fromDate и toDate обязательны');
-            }
+            // Получаем диапазон дат
+            const { fromDate, toDate } = DateUtils.getDateRange(period);
 
             // Получить данные для отчёта
             const summary = await this.dataService.getSummaryMetrics(campaignId, fromDate, toDate);
@@ -45,7 +43,7 @@ class ReportsService {
             };
 
             // Построить PDF через PdfReportBuilder
-            const pdfBuffer = await this.pdfBuilder.build(reportData);
+            const pdfBuffer = await this.pdfBuilder.build(reportData, period);
 
             return pdfBuffer;
 
@@ -60,18 +58,15 @@ class ReportsService {
      * Генерирует Excel отчёт по кампании
      * 
      * @param {number} campaignId - ID кампании
-     * @param {string} fromDate - Дата начала периода (YYYY-MM-DD)
-     * @param {string} toDate - Дата окончания периода (YYYY-MM-DD)
+     * @param {string} [period='this_week'] - Период отчета
      * @returns {Promise<Buffer>} - Excel документ в виде Buffer
      */
-    async generateExcelReport(campaignId, fromDate, toDate) {
-        console.log(`📊 Генерация Excel отчёта: кампания ${campaignId}, ${fromDate} - ${toDate}`);
+    async generateExcelReport(campaignId, period = 'this_week') {
+        console.log(`📊 Генерация Excel отчёта: кампания ${campaignId}, период: ${period}`);
 
         try {
-            // Валидация даты
-            if (!fromDate || !toDate) {
-                throw new Error('fromDate и toDate обязательны');
-            }
+            // Получаем диапазон дат
+            const { fromDate, toDate } = DateUtils.getDateRange(period);
 
             // Получить данные для отчёта
             const summary = await this.dataService.getSummaryMetrics(campaignId, fromDate, toDate);
@@ -84,7 +79,7 @@ class ReportsService {
             };
 
             // Построить Excel через ExcelReportBuilder
-            const excelBuffer = await this.excelBuilder.build(reportData);
+            const excelBuffer = await this.excelBuilder.build(reportData, period);
 
             return excelBuffer;
 

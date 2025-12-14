@@ -1,17 +1,23 @@
 const ExcelJS = require('exceljs');
+const DateUtils = require('../Utils/DateUtils');
 
 class ExcelReportBuilder {
     /**
      * Построить Excel отчёт
      * 
      * @param {object} reportData - Данные для отчёта
+     * @param {string} [period='this_week'] - Период отчета
      * @returns {Promise<Buffer>} - Excel документ в виде Buffer
      */
-    async build(reportData) {
+    async build(reportData, period = 'this_week') {
+        // Получаем диапазон дат
+        const { fromDate, toDate } = DateUtils.getDateRange(period);
+        const periodDescription = DateUtils.getPeriodDescription(period);
+
         const workbook = new ExcelJS.Workbook();
         
-        // Титульный лист
-        this._createTitleSheet(workbook, reportData);
+        // Титульный лист с учетом периода
+        this._createTitleSheet(workbook, reportData, fromDate, toDate, periodDescription);
 
         // Лист с основными метриками
         this._createSummarySheet(workbook, reportData);
@@ -28,8 +34,11 @@ class ExcelReportBuilder {
      * 
      * @param {ExcelJS.Workbook} workbook - Рабочая книга
      * @param {object} reportData - Данные для отчёта
+     * @param {string} fromDate - Начальная дата периода
+     * @param {string} toDate - Конечная дата периода
+     * @param {string} periodDescription - Описание периода
      */
-    _createTitleSheet(workbook, reportData) {
+    _createTitleSheet(workbook, reportData, fromDate, toDate, periodDescription) {
         const { summary } = reportData;
         const sheet = workbook.addWorksheet('Титульный лист');
 
@@ -52,7 +61,7 @@ class ExcelReportBuilder {
         sheet.getCell('A3').style = subtitleStyle;
 
         sheet.mergeCells('A4:D4');
-        sheet.getCell('A4').value = `Период: ${summary.from_date || ''} - ${summary.to_date || ''}`;
+        sheet.getCell('A4').value = `Период: ${fromDate} - ${toDate} (${periodDescription})`;
         sheet.getCell('A4').style = subtitleStyle;
 
         // Автоширина столбцов
