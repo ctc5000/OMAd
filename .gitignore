@@ -137,3 +137,6 @@ dist
 
 pm2.json
 config/config.json
+
+modules/Reports/Builders/debug_report_info.txt
+modules/Reports/Builders/debug_report.pdf
