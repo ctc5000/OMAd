@@ -1,0 +1,13 @@
+{
+    "moduleName": "Auth",
+    "version": "1.0.0",
+    "description": "Authentication and Authorization module for Order Master® Ads Analytics",
+    "apiPrefix": "/api/auth",
+    "requiresAuth": false,
+    "dependencies": [],
+    "features": [
+        "JWT Authentication",
+        "Role-based Access Control",
+        "Advertiser Data Isolation"
+    ]
+}
