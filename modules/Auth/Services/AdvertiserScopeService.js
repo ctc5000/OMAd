@@ -20,3 +20,4 @@ class AdvertiserScopeService {
 }
 
 module.exports = AdvertiserScopeService;
+

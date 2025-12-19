@@ -32,3 +32,4 @@ module.exports = function initModels(sequelize) {
 
     return models;
 };
+

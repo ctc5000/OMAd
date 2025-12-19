@@ -36,3 +36,4 @@ module.exports = {
         await queryInterface.dropTable('api_keys');
     }
 };
+
