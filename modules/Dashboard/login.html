@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Master - Login</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            color: white;
+        }
+
+        .login-container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 40px;
+            width: 350px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 15px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .login-container h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .input-group {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 12px 15px;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .input-group i {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .input-group input:not(:placeholder-shown) + i {
+            color: white;
+        }
+
+        .input-group input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .login-button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .login-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .login-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .error-message {
+            color: #e74c3c;
+            text-align: center;
+            margin-top: 15px;
+            background: rgba(231, 76, 60, 0.1);
+            padding: 10px;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1><i class="fas fa-chart-line"></i> Order Master</h1>
+        <form id="loginForm">
+            <div class="input-group">
+                <input type="email" id="email" name="email" placeholder="Email" required autocomplete="email">
+                <i class="fas fa-envelope"></i>
+            </div>
+            <div class="input-group">
+                <input type="password" id="password" name="password" placeholder="Пароль" required autocomplete="current-password">
+                <i class="fas fa-lock"></i>
+            </div>
+            <button type="submit" class="login-button" id="loginBtn">
+                <i class="fas fa-sign-in-alt"></i> Войти
+            </button>
+        </form>
+        <div id="errorMessage" class="error-message" style="display: none;"></div>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const loginBtn = document.getElementById('loginBtn');
+            const errorMessage = document.getElementById('errorMessage');
+
+            // Disable button and reset error message
+            loginBtn.disabled = true;
+            errorMessage.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const result = await response.json();
+
+if (result.success) {
+  console.log('Login successful. Received token:', result.token);
+  console.log('User role:', result.role);
+  console.log('User ID:', result.userId);
+
+  // Validate token before storing and redirecting
+  if (!result.token) {
+    console.error('No token received');
+    errorMessage.textContent = 'Ошибка авторизации. Токен не получен.';
+    errorMessage.style.display = 'block';
+    return;
+  }
+
+  // Store token and user info
+  localStorage.setItem('authToken', result.token);
+  localStorage.setItem('userRole', result.role);
+  localStorage.setItem('userId', result.userId || '');
+  
+  // Redirect based on role
+  if (result.role === 'ADMIN') {
+    window.location.href = '/api/dashboard/web';
+  } else {
+    // Fallback or handle non-admin users
+    window.location.href = '/api/dashboard/web'; 
+  }
+} else {
+  // Login failed
+  console.error('Login failed:', result.error);
+  errorMessage.textContent = result.error || 'Ошибка входа. Пожалуйста, проверьте логин и пароль.';
+  errorMessage.style.display = 'block';
+}
+            } catch (error) {
+                console.error('Login error:', error);
+                errorMessage.textContent = 'Ошибка связи с сервером. Пожалуйста, попробуйте позже.';
+                errorMessage.style.display = 'block';
+            } finally {
+                loginBtn.disabled = false;
+            }
+        });
+
+        // Automatically redirect if already logged in with a valid token
+        document.addEventListener('DOMContentLoaded', () => {
+  const token = localStorage.getItem('authToken');
+  const userRole = localStorage.getItem('userRole');
+  
+  console.log('Token at page load:', token);
+  console.log('User Role at page load:', userRole);
+
+  if (token) {
+    // Improved token validation with more detailed logging
+    fetch('/api/dashboard/validate-token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token  // Use string concatenation
+      }
+    }).then(response => {
+      console.log('Token validation response status:', response.status);
+      
+      if (response.ok) {
+        return response.json().then(data => {
+          console.log('Token validation response data:', data);
+          
+          // Redirect based on role
+          if (data.user && data.user.role === 'ADMIN') {
+            window.location.href = '/api/dashboard/web';
+          } else {
+            // Fallback redirect or handle non-admin users
+            window.location.href = '/api/dashboard/web';
+          }
+        });
+      } else {
+        console.error('Token validation failed. Removing token.');
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('userRole');
+        // Optional: show login error message
+      }
+    }).catch(error => {
+      console.error('Token validation error:', error);
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('userRole');
+    });
+  }
+});
+    </script>
+</body>
+</html>

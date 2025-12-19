@@ -22,7 +22,7 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false
         },
         advertiser_id: {
-            type: DataTypes.UUID,
+            type: DataTypes.INTEGER,
             allowNull: true,
             references: {
                 model: 'advertisers', // Use lowercase table name

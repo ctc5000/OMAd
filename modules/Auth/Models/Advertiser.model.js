@@ -1,9 +1,9 @@
 module.exports = (sequelize, DataTypes) => {
     const Advertiser = sequelize.define('Advertiser', {
         id: {
-            type: DataTypes.UUID,
+            type: DataTypes.INTEGER,
             primaryKey: true,
-            defaultValue: DataTypes.UUIDV4
+            autoIncrement: true
         },
         name: {
             type: DataTypes.STRING,
@@ -29,10 +29,10 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'advertiser_id',
             as: 'users'
         });
-        Advertiser.hasMany(models.ApiKey, {
-            foreignKey: 'advertiser_id',
-            as: 'apiKeys'
-        });
+        // Advertiser.hasMany(models.ApiKey, {
+        //     foreignKey: 'advertiser_id',
+        //     as: 'apiKeys'
+        // });
     };
 
     return Advertiser;

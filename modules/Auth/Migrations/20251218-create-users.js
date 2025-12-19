@@ -20,7 +20,7 @@ module.exports = {
                 allowNull: false
             },
             advertiser_id: {
-                type: Sequelize.UUID,
+                type: Sequelize.INTEGER,
                 allowNull: true,
                 references: {
                     model: 'advertisers',
