@@ -470,13 +470,18 @@
   // Проверка авторизации
    // Функция для проверки авторизации
    async function checkAuth() {
-    const token = localStorage.getItem('authToken');
+    // First, check for injected token from server
+    const serverToken = window.authToken || localStorage.getItem('authToken');
     
-    if (!token) {
-      console.log('❌ Токен не найден в localStorage');
-      showAuthError('Требуется авторизация');
+    if (!serverToken) {
+      console.log('❌ Токен не найден ни в окружении, ни в localStorage');
+      showAuthError('Требуется авторизация. Пожалуйста, войдите снова.');
       return null;
     }
+    
+    const token = serverToken.startsWith('Bearer ') 
+      ? serverToken.split(' ')[1] 
+      : serverToken;
     
     try {
       const response = await fetch('/api/auth/validate', {
@@ -486,19 +491,51 @@
         }
       });
       
-      if (!response.ok) {
-        throw new Error('Token invalid');
-      }
-      
       const data = await response.json();
-      if (data.success) {
-        console.log('✅ Токен валиден');
+      
+      if (response.ok && data.success) {
+        console.log('✅ Токен валиден', {
+          userId: data.user.id,
+          role: data.user.role
+        });
+
+        // Store token for future use
+        localStorage.setItem('authToken', token);
+        
         return data.user;
       } else {
-        throw new Error('Token validation failed');
+        // Более подробная обработка ошибок
+        const errorDetails = data.details || {};
+        console.error('❌ Ошибка валидации токена', {
+          status: response.status,
+          error: data.error,
+          details: errorDetails
+        });
+
+        // Специфические сообщения об ошибках
+        let errorMessage = 'Ошибка авторизации';
+        switch (data.error) {
+          case 'Token has expired':
+            errorMessage = 'Срок действия сессии истек. Пожалуйста, войдите заново.';
+            break;
+          case 'Invalid token signature':
+            errorMessage = 'Обнаружена неправильная подпись токена. Требуется повторный вход.';
+            break;
+          default:
+            errorMessage = data.error || 'Не удалось проверить авторизацию';
+        }
+
+        showAuthError(errorMessage);
+        logout();
+        return null;
       }
     } catch (error) {
-      console.log('❌ Ошибка проверки токена:', error.message);
+      console.error('❌ Критическая ошибка проверки токена:', {
+        message: error.message,
+        name: error.name
+      });
+      
+      showAuthError('Произошла системная ошибка. Пожалуйста, попробуйте позже.');
       logout();
       return null;
     }
@@ -560,7 +597,8 @@
     const token = localStorage.getItem('authToken');
     
     if (!token) {
-      showAuthError('Требуется авторизация');
+      console.error('❌ No token found in localStorage');
+      showAuthError('Требуется авторизация. Пожалуйста, войдите снова.');
       return;
     }
     
@@ -568,19 +606,36 @@
       document.getElementById('loading').style.display = 'block';
       document.getElementById('dashboard-content').style.display = 'none';
       
+      console.log('🔐 Sending dashboard request with token', {
+        tokenLength: token.length,
+        period: period
+      });
+      
       const response = await fetch('/api/dashboard/data?period=' + period, {
+        method: 'GET',
         headers: {
-          'Authorization': 'Bearer ' + token
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json'
         }
       });
       
+      console.log('📡 Dashboard Response Status:', response.status);
+      
       if (response.status === 401) {
+        console.error('❌ Unauthorized access');
+        showAuthError('Сессия истекла. Пожалуйста, войдите заново.');
         logout();
         return;
       }
       
       if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}`);
+        const errorText = await response.text();
+        console.error('❌ Dashboard Request Error', {
+          status: response.status,
+          statusText: response.statusText,
+          errorText: errorText
+        });
+        throw new Error(`HTTP error ${response.status}: ${errorText}`);
       }
       
       const result = await response.json();
@@ -596,9 +651,17 @@
         throw new Error(result.error || 'Ошибка загрузки данных');
       }
     } catch (error) {
-      console.error('❌ Ошибка загрузки данных:', error);
+      console.error('❌ Критическая ошибка загрузки данных:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack
+      });
+      
       document.getElementById('loading').innerHTML = 
         '<i class="fas fa-exclamation-triangle"></i> Ошибка загрузки данных: ' + error.message;
+      
+      showAuthError('Не удалось загрузить данные. Пожалуйста, попробуйте войти снова.');
+      logout();
     }
   }
 

@@ -28,23 +28,15 @@ class DashboardController {
     }
 
     // Основные метрики дашборда
-    async getDashboardData(req, res) {
+    async getDashboardData(period = 'today', advertiserId = null, campaignId = null) {
         try {
-            const { period = 'today', campaign_id } = req.query;
-            const advertiserId = req.user.advertiserId; // Из JWT токена
-            const userRole = req.user.role;
-
-            console.log(`📊 Запрос дашборда: период=${period}, campaign=${campaign_id || 'все'}, advertiser=${advertiserId || 'все'}, role=${userRole}`);
+            console.log(`📊 Запрос дашборда: период=${period}, campaign=${campaignId || 'все'}, advertiser=${advertiserId || 'все'}`);
 
             // Проверяем наличие необходимых моделей
             const requiredModels = ['Session', 'AdImpression', 'AdClick', 'AdConversion'];
             for (const modelName of requiredModels) {
                 if (!this.models || !this.models[modelName]) {
-                    return res.status(500).json({
-                        success: false,
-                        error: `Модель ${modelName} не загружена`,
-                        timestamp: new Date().toISOString()
-                    });
+                    throw new Error(`Модель ${modelName} не загружена`);
                 }
             }
 
@@ -52,10 +44,10 @@ class DashboardController {
             
             // Собираем данные с учетом изоляции
             const dashboardData = {
-                overview: await this.getOverviewMetrics(period, campaign_id, advertiserId),
+                overview: await this.getOverviewMetrics(period, campaignId, advertiserId),
                 realtime: await this.getRealtimeMetrics(advertiserId),
                 campaigns: await this.getTopCampaigns(period, advertiserId),
-                funnel: await this.getConversionFunnel(period, campaign_id, advertiserId),
+                funnel: await this.getConversionFunnel(period, campaignId, advertiserId),
                 hourly: await this.getHourlyMetrics(period, advertiserId),
                 segments: await this.getMetricsByRestaurantSegment(period, advertiserId),
                 summary: {
@@ -68,18 +60,18 @@ class DashboardController {
             };
 
             console.log('✅ Данные дашборда собраны успешно');
-            return res.json({
+            return {
                 success: true,
                 data: dashboardData,
                 timestamp: new Date().toISOString()
-            });
+            };
         } catch (error) {
             console.error('❌ Ошибка в getDashboardData:', error);
-            return res.status(500).json({
+            return {
                 success: false,
                 error: error.message,
                 timestamp: new Date().toISOString()
-            });
+            };
         }
     }
 

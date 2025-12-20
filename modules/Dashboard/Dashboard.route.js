@@ -59,16 +59,22 @@ module.exports = (app, moduleName, controller, makeHandlerAwareOfAsyncErrors, mo
         verifyJWT,
         makeHandlerAwareOfAsyncErrors(async (req, res) => {
             try {
-                const { period = 'today' } = req.query;
+                const { period = 'today', campaign_id } = req.query;
                 const advertiserId = req.user.advertiserId;
                 
-                const data = await controller.getDashboardData(period, advertiserId);
-                res.json(data);
+                const result = await controller.getDashboardData(period, advertiserId, campaign_id);
+                
+                if (result.success) {
+                    res.json(result);
+                } else {
+                    res.status(500).json(result);
+                }
             } catch (error) {
                 console.error('Error fetching dashboard data:', error);
                 res.status(500).json({ 
                     success: false, 
-                    error: 'Failed to fetch dashboard data' 
+                    error: 'Failed to fetch dashboard data',
+                    details: error.message
                 });
             }
         })
@@ -222,15 +228,19 @@ module.exports = (app, moduleName, controller, makeHandlerAwareOfAsyncErrors, mo
         })
     );
 
-    // Web интерфейс дашборда (защищенный)
+    // Web интерфейс дашборда (проверка токена на клиенте)
     app.get('/dashboard',
-        verifyJWT,
         (req, res) => {
             try {
+                console.log('📊 Dashboard page requested');
+                
                 const htmlContent = loadTemplate('dashboard.template.html');
                 res.send(htmlContent);
             } catch (error) {
-                console.error('❌ Ошибка загрузки дашборда:', error);
+                console.error('❌ Ошибка загрузки дашборда:', {
+                    message: error.message,
+                    stack: error.stack
+                });
                 res.status(500).send('Ошибка загрузки дашборда');
             }
         }
