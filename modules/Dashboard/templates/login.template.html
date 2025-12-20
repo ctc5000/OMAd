@@ -137,7 +137,6 @@
             const loginBtn = document.getElementById('loginBtn');
             const errorMessage = document.getElementById('errorMessage');
 
-            // Disable button and reset error message
             loginBtn.disabled = true;
             errorMessage.style.display = 'none';
 
@@ -152,39 +151,27 @@
 
                 const result = await response.json();
 
-if (result.success) {
-  console.log('Login successful. Received token:', result.token);
-  console.log('User role:', result.role);
-  console.log('User ID:', result.userId);
-
-  // Validate token before storing and redirecting
-  if (!result.token) {
-    console.error('No token received');
-    errorMessage.textContent = 'Ошибка авторизации. Токен не получен.';
-    errorMessage.style.display = 'block';
-    return;
-  }
-
-  // Store token and user info
-  localStorage.setItem('authToken', result.token);
-  localStorage.setItem('userRole', result.role);
-  localStorage.setItem('userId', result.userId || '');
-  
-  // Redirect based on role
-  if (result.role === 'ADMIN') {
-    window.location.href = '/api/dashboard/web';
-  } else {
-    // Fallback or handle non-admin users
-    window.location.href = '/api/dashboard/web'; 
-  }
-} else {
-  // Login failed
-  console.error('Login failed:', result.error);
-  errorMessage.textContent = result.error || 'Ошибка входа. Пожалуйста, проверьте логин и пароль.';
-  errorMessage.style.display = 'block';
-}
+                if (result.success) {
+                    console.log('✅ Логин успешен. Token получен');
+                    
+                    // Сохраняем токен и данные пользователя
+                    localStorage.setItem('authToken', result.token);
+                    localStorage.setItem('userRole', result.role);
+                    localStorage.setItem('userId', result.userId || '');
+                    localStorage.setItem('advertiserId', result.advertiserId || '');
+                    
+                    // Проверяем что токен сохранен
+                    console.log('📦 Token сохранен в localStorage:', localStorage.getItem('authToken') ? 'Да' : 'Нет');
+                    
+                    // Делаем редирект
+                    console.log('🔄 Редирект на /dashboard');
+                    window.location.href = '/dashboard';
+                } else {
+                    errorMessage.textContent = result.error || 'Ошибка входа';
+                    errorMessage.style.display = 'block';
+                }
             } catch (error) {
-                console.error('Login error:', error);
+                console.error('❌ Login error:', error);
                 errorMessage.textContent = 'Ошибка связи с сервером. Пожалуйста, попробуйте позже.';
                 errorMessage.style.display = 'block';
             } finally {
@@ -192,50 +179,41 @@ if (result.success) {
             }
         });
 
-        // Automatically redirect if already logged in with a valid token
+        // Проверка авторизации при загрузке страницы
         document.addEventListener('DOMContentLoaded', () => {
-  const token = localStorage.getItem('authToken');
-  const userRole = localStorage.getItem('userRole');
-  
-  console.log('Token at page load:', token);
-  console.log('User Role at page load:', userRole);
-
-  if (token) {
-    // Improved token validation with more detailed logging
-    fetch('/api/dashboard/validate-token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + token  // Use string concatenation
-      }
-    }).then(response => {
-      console.log('Token validation response status:', response.status);
-      
-      if (response.ok) {
-        return response.json().then(data => {
-          console.log('Token validation response data:', data);
-          
-          // Redirect based on role
-          if (data.user && data.user.role === 'ADMIN') {
-            window.location.href = '/api/dashboard/web';
-          } else {
-            // Fallback redirect or handle non-admin users
-            window.location.href = '/api/dashboard/web';
-          }
+            const token = localStorage.getItem('authToken');
+            
+            if (token) {
+                console.log('🔑 Найден токен в localStorage, проверяем...');
+                
+                // Проверяем токен
+                fetch('/api/auth/validate', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                })
+                .then(response => {
+                    if (response.ok) {
+                        return response.json();
+                    }
+                    throw new Error('Token invalid');
+                })
+                .then(data => {
+                    if (data.success) {
+                        console.log('✅ Токен валиден, редирект на /dashboard');
+                        window.location.href = '/dashboard';
+                    }
+                })
+                .catch(error => {
+                    console.log('❌ Токен невалиден, очищаем localStorage');
+                    localStorage.removeItem('authToken');
+                    localStorage.removeItem('userRole');
+                    localStorage.removeItem('userId');
+                    localStorage.removeItem('advertiserId');
+                });
+            }
         });
-      } else {
-        console.error('Token validation failed. Removing token.');
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('userRole');
-        // Optional: show login error message
-      }
-    }).catch(error => {
-      console.error('Token validation error:', error);
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('userRole');
-    });
-  }
-});
     </script>
 </body>
 </html>

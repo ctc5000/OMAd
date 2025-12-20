@@ -4,29 +4,42 @@ const { Model, DataTypes, Op, Sequelize } = require('sequelize');
 class DashboardController {
     constructor(models, sequelize) {
         this.models = models;
-        this.sequelize = sequelize; // Получаем sequelize из второго параметра
-        this.Sequelize = Sequelize; // Класс Sequelize для статических методов
+        this.sequelize = sequelize;
+        this.Sequelize = Sequelize;
         this.Op = Op;
         
-        if (!this.sequelize) {
-            console.warn('⚠️ Sequelize instance не передан в DashboardController, используем класс Sequelize');
-        }
+        console.log('📊 DashboardController инициализирован с поддержкой изоляции данных');
+    }
+
+    async getCampaignIdsByAdvertiser(advertiserId) {
+        if (!advertiserId) return null;
         
-        console.log('📊 DashboardController инициализирован');
+        try {
+            const campaigns = await this.models.Campaign.findAll({
+                where: { advertiser_id: advertiserId },
+                attributes: ['id'],
+                raw: true
+            });
+            return campaigns.map(c => c.id);
+        } catch (error) {
+            console.error('Ошибка получения campaign_ids:', error);
+            return [];
+        }
     }
 
     // Основные метрики дашборда
     async getDashboardData(req, res) {
         try {
-            const { period = 'today', campaign_id, advertiser_id } = req.query;
+            const { period = 'today', campaign_id } = req.query;
+            const advertiserId = req.user.advertiserId; // Из JWT токена
+            const userRole = req.user.role;
 
-            console.log(`📊 Запрос дашборда: период=${period}, campaign=${campaign_id || 'все'}`);
+            console.log(`📊 Запрос дашборда: период=${period}, campaign=${campaign_id || 'все'}, advertiser=${advertiserId || 'все'}, role=${userRole}`);
 
             // Проверяем наличие необходимых моделей
             const requiredModels = ['Session', 'AdImpression', 'AdClick', 'AdConversion'];
             for (const modelName of requiredModels) {
                 if (!this.models || !this.models[modelName]) {
-                    console.error(`❌ Модель ${modelName} не загружена`);
                     return res.status(500).json({
                         success: false,
                         error: `Модель ${modelName} не загружена`,
@@ -37,20 +50,20 @@ class DashboardController {
 
             console.log('📊 Начинаем сбор данных дашборда...');
             
-            // Используем try-catch для каждого блока данных
+            // Собираем данные с учетом изоляции
             const dashboardData = {
-                overview: await this.getOverviewMetrics(period, campaign_id, advertiser_id),
-                realtime: await this.getRealtimeMetrics(),
-                campaigns: await this.getTopCampaigns(period),
-                funnel: await this.getConversionFunnel(period, campaign_id),
-                hourly: await this.getHourlyMetrics(period),
-                segments: await this.getMetricsByRestaurantSegment(period),
+                overview: await this.getOverviewMetrics(period, campaign_id, advertiserId),
+                realtime: await this.getRealtimeMetrics(advertiserId),
+                campaigns: await this.getTopCampaigns(period, advertiserId),
+                funnel: await this.getConversionFunnel(period, campaign_id, advertiserId),
+                hourly: await this.getHourlyMetrics(period, advertiserId),
+                segments: await this.getMetricsByRestaurantSegment(period, advertiserId),
                 summary: {
                     period: period,
                     start_date: this.getPeriodStartDate(period),
                     end_date: new Date(),
-                    total_campaigns: await this.getTotalCampaigns(),
-                    active_campaigns: await this.getActiveCampaignsCount()
+                    total_campaigns: await this.getTotalCampaigns(advertiserId),
+                    active_campaigns: await this.getActiveCampaignsCount(advertiserId)
                 }
             };
 
@@ -62,7 +75,6 @@ class DashboardController {
             });
         } catch (error) {
             console.error('❌ Ошибка в getDashboardData:', error);
-            console.error('Stack trace:', error.stack);
             return res.status(500).json({
                 success: false,
                 error: error.message,
@@ -72,11 +84,13 @@ class DashboardController {
     }
 
     // Метрики обзора
-    async getOverviewMetrics(period = 'today', campaign_id, advertiser_id, includeChange = true) {
+    async getOverviewMetrics(period = 'today', campaign_id, advertiserId, includeChange = true) {
         const dateRange = this.getDateRange(period);
 
         try {
-            // Базовые метрики
+            // Получаем campaign_ids для данного advertiser
+            const campaignIds = advertiserId ? await this.getCampaignIdsByAdvertiser(advertiserId) : null;
+
             const [
                 uv,
                 reach,
@@ -85,36 +99,24 @@ class DashboardController {
                 conversions,
                 campaignsData
             ] = await Promise.all([
-                this.calculateUV(dateRange, campaign_id, advertiser_id),
-                this.calculateReach(dateRange, campaign_id, advertiser_id),
-                this.calculateImpressions(dateRange, campaign_id, advertiser_id),
-                this.calculateClicks(dateRange, campaign_id, advertiser_id),
-                this.calculateConversions(dateRange, campaign_id, advertiser_id),
-                this.getCampaignCosts(campaign_id, advertiser_id)
+                this.calculateUV(dateRange, campaign_id, campaignIds),
+                this.calculateReach(dateRange, campaign_id, campaignIds),
+                this.calculateImpressions(dateRange, campaign_id, campaignIds),
+                this.calculateClicks(dateRange, campaign_id, campaignIds),
+                this.calculateConversions(dateRange, campaign_id, campaignIds),
+                this.getCampaignCosts(campaign_id, advertiserId)
             ]);
 
-            // Производные метрики: CTR = clicks / impressions
+            // Производные метрики
             const ctr = impressions > 0 ? parseFloat((clicks / impressions * 100).toFixed(2)) : 0;
-            // Производная метрика: CR = conversions / reach
             const cr = reach > 0 ? parseFloat((conversions / reach * 100).toFixed(2)) : 0;
             
-            // Расчет стоимостных метрик
-            // CPUV = cost_per_uv (стоимость за одного посетителя)
-            let cpuv = null;
-            if (campaignsData && campaignsData.cost_per_uv) {
-                cpuv = parseFloat(campaignsData.cost_per_uv);
-            }
-            
-            // CPC = cost_per_click (стоимость за один клик)
-            let cpc = null;
-            if (campaignsData && campaignsData.cost_per_click) {
-                cpc = parseFloat(campaignsData.cost_per_click);
-            }
-            
-            // CPL = cost_per_lead (стоимость за одну конверсию)
-            let cpl = null;
-            if (campaignsData && campaignsData.cost_per_lead) {
-                cpl = parseFloat(campaignsData.cost_per_lead);
+            // Стоимостные метрики
+            let cpuv = null, cpc = null, cpl = null;
+            if (campaignsData) {
+                cpuv = campaignsData.cost_per_uv ? parseFloat(campaignsData.cost_per_uv) : null;
+                cpc = campaignsData.cost_per_click ? parseFloat(campaignsData.cost_per_click) : null;
+                cpl = campaignsData.cost_per_lead ? parseFloat(campaignsData.cost_per_lead) : null;
             }
 
             const result = {
@@ -130,9 +132,9 @@ class DashboardController {
                 cpl: cpl
             };
 
-            // Добавляем изменения только если не рекурсивный вызов
+            // Добавляем изменения если не рекурсивный вызов
             if (includeChange) {
-                result.change = await this.getChangeMetrics(period, campaign_id, advertiser_id);
+                result.change = await this.getChangeMetrics(period, campaign_id, advertiserId);
             }
 
             return result;
@@ -143,28 +145,29 @@ class DashboardController {
     }
 
     // Метрики в реальном времени (последний час)
-    async getRealtimeMetrics() {
+    async getRealtimeMetrics(advertiserId = null) {
         try {
             const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+            const campaignIds = advertiserId ? await this.getCampaignIdsByAdvertiser(advertiserId) : null;
 
             const realtimeData = {
-                current_uv: await this.getRecentSessionsCount(oneHourAgo),
-                current_impressions: await this.getRecentImpressionsCount(oneHourAgo),
-                current_clicks: await this.getRecentClicksCount(oneHourAgo),
-                current_conversions: await this.getRecentConversionsCount(oneHourAgo),
-                active_sessions: await this.getActiveSessionsCount(),
-                peak_hour: await this.getPeakHour(),
+                current_uv: await this.getRecentSessionsCount(oneHourAgo, campaignIds),
+                current_impressions: await this.getRecentImpressionsCount(oneHourAgo, campaignIds),
+                current_clicks: await this.getRecentClicksCount(oneHourAgo, campaignIds),
+                current_conversions: await this.getRecentConversionsCount(oneHourAgo, campaignIds),
+                active_sessions: await this.getActiveSessionsCount(campaignIds),
+                peak_hour: await this.getPeakHour(campaignIds),
                 timestamp: new Date().toISOString()
             };
 
             // Рассчитываем средние значения
             realtimeData.avg_ctr = realtimeData.current_impressions > 0
-            ? parseFloat((realtimeData.current_clicks / realtimeData.current_impressions * 100).toFixed(2))
-            : 0;
+                ? parseFloat((realtimeData.current_clicks / realtimeData.current_impressions * 100).toFixed(2))
+                : 0;
 
-        realtimeData.avg_cr = realtimeData.current_uv > 0
-            ? parseFloat((realtimeData.current_conversions / realtimeData.current_uv * 100).toFixed(2))
-            : 0;
+            realtimeData.avg_cr = realtimeData.current_uv > 0
+                ? parseFloat((realtimeData.current_conversions / realtimeData.current_uv * 100).toFixed(2))
+                : 0;
 
             return realtimeData;
         } catch (error) {
@@ -174,17 +177,16 @@ class DashboardController {
     }
 
     // Топ кампаний
-    async getTopCampaigns(period = 'today', limit = 10) {
+    async getTopCampaigns(period = 'today', advertiserId = null, limit = 10) {
         try {
-            // Проверяем наличие модели Campaign
             if (!this.models.Campaign) {
-                console.warn('Модель Campaign не доступна');
                 return [];
             }
 
             const dateRange = this.getDateRange(period);
 
-            const topCampaigns = await this.models.AdConversion.findAll({
+            // Базовый запрос для получения топ конверсий
+            let query = {
                 attributes: [
                     'campaign_id',
                     [Sequelize.fn('COUNT', Sequelize.col('id')), 'conversions'],
@@ -200,7 +202,18 @@ class DashboardController {
                 order: [[Sequelize.literal('conversions'), 'DESC']],
                 limit: limit,
                 raw: true
-            });
+            };
+
+            // Если указан advertiser, фильтруем по его кампаниям
+            if (advertiserId) {
+                const campaignIds = await this.getCampaignIdsByAdvertiser(advertiserId);
+                if (campaignIds.length === 0) {
+                    return [];
+                }
+                query.where.campaign_id = { [this.Op.in]: campaignIds };
+            }
+
+            const topCampaigns = await this.models.AdConversion.findAll(query);
 
             // Дополняем информацией о кампаниях
             const campaignsWithDetails = await Promise.all(
@@ -210,6 +223,11 @@ class DashboardController {
                         campaignInfo = await this.models.Campaign.findByPk(campaign.campaign_id);
                     } catch (error) {
                         console.warn(`Не удалось получить информацию о кампании ${campaign.campaign_id}:`, error.message);
+                    }
+
+                    // Проверяем доступ к кампании
+                    if (advertiserId && campaignInfo && campaignInfo.advertiser_id != advertiserId) {
+                        return null;
                     }
 
                     const stats = await this.getCampaignStats(campaign.campaign_id, dateRange);
@@ -224,12 +242,13 @@ class DashboardController {
                         cpuv: stats.cpuv,
                         cpc: stats.cpc,
                         cpl: stats.cpl,
-                        status: campaignInfo?.status || 'unknown'
+                        status: campaignInfo?.status || 'unknown',
+                        advertiser_id: campaignInfo?.advertiser_id
                     };
                 })
             );
 
-            return campaignsWithDetails.filter(campaign => campaign.conversions > 0);
+            return campaignsWithDetails.filter(campaign => campaign && campaign.conversions > 0);
         } catch (error) {
             console.error('Ошибка получения топ кампаний:', error);
             return [];
@@ -237,15 +256,24 @@ class DashboardController {
     }
 
     // Воронка конверсий
-    async getConversionFunnel(period = 'today', campaign_id) {
+    async getConversionFunnel(period = 'today', campaign_id, advertiserId = null) {
         try {
             const dateRange = this.getDateRange(period);
+            const campaignIds = advertiserId ? await this.getCampaignIdsByAdvertiser(advertiserId) : null;
+
+            // Если указана конкретная кампания, проверяем доступ
+            if (campaign_id && advertiserId) {
+                const campaign = await this.models.Campaign.findByPk(campaign_id);
+                if (campaign && campaign.advertiser_id != advertiserId) {
+                    throw new Error('Доступ к кампании запрещен');
+                }
+            }
 
             const funnelData = {
-                sessions: await this.getSessionsCount(dateRange, campaign_id),
-                impressions: await this.getImpressionsCount(dateRange, campaign_id),
-                clicks: await this.getClicksCount(dateRange, campaign_id),
-                conversions: await this.getConversionsCount(dateRange, campaign_id),
+                sessions: await this.getSessionsCount(dateRange, campaign_id, campaignIds),
+                impressions: await this.getImpressionsCount(dateRange, campaign_id, campaignIds),
+                clicks: await this.getClicksCount(dateRange, campaign_id, campaignIds),
+                conversions: await this.getConversionsCount(dateRange, campaign_id, campaignIds),
                 dropoffs: {
                     sessions_to_impressions: 0,
                     impressions_to_clicks: 0,
@@ -265,14 +293,14 @@ class DashboardController {
 
             // Рассчитываем проценты
             funnelData.rates.impression_rate = funnelData.sessions > 0
-            ? parseFloat((funnelData.impressions / funnelData.sessions * 100).toFixed(2))
-            : 0;
-        funnelData.rates.click_through_rate = funnelData.impressions > 0
-            ? parseFloat((funnelData.clicks / funnelData.impressions * 100).toFixed(2))
-            : 0;
-        funnelData.rates.conversion_rate = funnelData.clicks > 0
-            ? parseFloat((funnelData.conversions / funnelData.clicks * 100).toFixed(2))
-            : 0;
+                ? parseFloat((funnelData.impressions / funnelData.sessions * 100).toFixed(2))
+                : 0;
+            funnelData.rates.click_through_rate = funnelData.impressions > 0
+                ? parseFloat((funnelData.clicks / funnelData.impressions * 100).toFixed(2))
+                : 0;
+            funnelData.rates.conversion_rate = funnelData.clicks > 0
+                ? parseFloat((funnelData.conversions / funnelData.clicks * 100).toFixed(2))
+                : 0;
 
             return funnelData;
         } catch (error) {
@@ -282,16 +310,15 @@ class DashboardController {
     }
 
     // Метрики по часам
-    async getHourlyMetrics(period = 'today') {
+    async getHourlyMetrics(period = 'today', advertiserId = null) {
         try {
             const dateRange = this.getDateRange(period);
+            const campaignIds = advertiserId ? await this.getCampaignIdsByAdvertiser(advertiserId) : null;
 
-            // Получаем данные по часам за последние 24 часа
             const now = new Date();
             const hourPromises = [];
 
             for (let i = 23; i >= 0; i--) {
-                // Используем IIFE для захвата значений переменных в каждой итерации
                 (() => {
                     const hourStart = new Date(now);
                     hourStart.setHours(now.getHours() - i, 0, 0, 0);
@@ -303,9 +330,9 @@ class DashboardController {
 
                     hourPromises.push(
                         Promise.all([
-                            this.getImpressionsInPeriod(hourStart, hourEnd),
-                            this.getClicksInPeriod(hourStart, hourEnd),
-                            this.getConversionsInPeriod(hourStart, hourEnd)
+                            this.getImpressionsInPeriod(hourStart, hourEnd, campaignIds),
+                            this.getClicksInPeriod(hourStart, hourEnd, campaignIds),
+                            this.getConversionsInPeriod(hourStart, hourEnd, campaignIds)
                         ]).then(([impressions, clicks, conversions]) => ({
                             hour: hourValue,
                             label: `${hourValue}:00`,
@@ -326,27 +353,51 @@ class DashboardController {
         }
     }
 
+
     // Метрики по сегментам ресторанов
-    async getMetricsByRestaurantSegment(period = 'today') {
+    async getMetricsByRestaurantSegment(period = 'today', advertiserId = null) {
         try {
             const dateRange = this.getDateRange(period);
             const segments = ['кофейня', 'средний', 'премиум'];
+            const campaignIds = advertiserId ? await this.getCampaignIdsByAdvertiser(advertiserId) : null;
+
             const segmentMetrics = [];
 
             for (const segment of segments) {
-                // Более простой запрос без join
-                const sessionIds = await this.models.Session.findAll({
+                // Получаем сессии для сегмента
+                const sessionWhere = {
+                    restaurant_segment: segment,
+                    created_at: {
+                        [this.Op.between]: [dateRange.start, dateRange.end]
+                    }
+                };
+
+                // Если есть campaignIds, фильтруем сессии по импрессиям этих кампаний
+                if (campaignIds && campaignIds.length > 0) {
+                    const impressions = await this.models.AdImpression.findAll({
+                        attributes: ['session_id'],
+                        where: {
+                            campaign_id: { [this.Op.in]: campaignIds },
+                            created_at: { [this.Op.between]: [dateRange.start, dateRange.end] }
+                        },
+                        raw: true
+                    });
+                    
+                    const sessionIds = [...new Set(impressions.map(imp => imp.session_id))];
+                    if (sessionIds.length === 0) {
+                        sessionWhere.id = { [this.Op.in]: [] }; // Нет сессий
+                    } else {
+                        sessionWhere.session_id = { [this.Op.in]: sessionIds };
+                    }
+                }
+
+                const sessions = await this.models.Session.findAll({
                     attributes: ['session_id'],
-                    where: {
-                        restaurant_segment: segment,
-                        created_at: {
-                            [this.Op.between]: [dateRange.start, dateRange.end]
-                        }
-                    },
+                    where: sessionWhere,
                     raw: true
                 });
 
-                const sessionIdList = sessionIds.map(s => s.session_id);
+                const sessionIdList = sessions.map(s => s.session_id);
 
                 let uv = 0;
                 let impressions = 0;
@@ -400,7 +451,7 @@ class DashboardController {
     }
 
     // Вспомогательные методы для расчетов
-    async calculateUV(dateRange, campaign_id, advertiser_id) {
+    async calculateUV(dateRange, campaign_id, campaignIds) {
         const where = {
             created_at: {
                 [this.Op.between]: [dateRange.start, dateRange.end]
@@ -408,7 +459,6 @@ class DashboardController {
         };
 
         if (campaign_id) {
-            // Используем подзапрос через Op.in
             const impressions = await this.models.AdImpression.findAll({
                 attributes: ['session_id'],
                 where: {
@@ -424,14 +474,32 @@ class DashboardController {
             if (sessionIds.length > 0) {
                 where.session_id = { [this.Op.in]: sessionIds };
             } else {
-                return 0; // Нет сессий для этой кампании
+                return 0;
+            }
+        } else if (campaignIds && campaignIds.length > 0) {
+            const impressions = await this.models.AdImpression.findAll({
+                attributes: ['session_id'],
+                where: {
+                    campaign_id: { [this.Op.in]: campaignIds },
+                    created_at: {
+                        [this.Op.between]: [dateRange.start, dateRange.end]
+                    }
+                },
+                raw: true
+            });
+            
+            const sessionIds = [...new Set(impressions.map(imp => imp.session_id))];
+            if (sessionIds.length > 0) {
+                where.session_id = { [this.Op.in]: sessionIds };
+            } else {
+                return 0;
             }
         }
 
         return await this.models.Session.count({ where });
     }
 
-    async calculateReach(dateRange, campaign_id, advertiser_id) {
+    async calculateReach(dateRange, campaign_id, campaignIds) {
         const where = {
             created_at: {
                 [this.Op.between]: [dateRange.start, dateRange.end]
@@ -440,10 +508,8 @@ class DashboardController {
 
         if (campaign_id) {
             where.campaign_id = campaign_id;
-        }
-
-        if (advertiser_id) {
-            where.advertiser_id = advertiser_id;
+        } else if (campaignIds && campaignIds.length > 0) {
+            where.campaign_id = { [this.Op.in]: campaignIds };
         }
 
         const sequelizeInstance = this.sequelize || this.Sequelize;
@@ -458,7 +524,7 @@ class DashboardController {
         return result[0]?.reach || 0;
     }
 
-    async calculateImpressions(dateRange, campaign_id, advertiser_id) {
+    async calculateImpressions(dateRange, campaign_id, campaignIds) {
         const where = {
             created_at: {
                 [this.Op.between]: [dateRange.start, dateRange.end]
@@ -467,16 +533,14 @@ class DashboardController {
 
         if (campaign_id) {
             where.campaign_id = campaign_id;
-        }
-
-        if (advertiser_id) {
-            where.advertiser_id = advertiser_id;
+        } else if (campaignIds && campaignIds.length > 0) {
+            where.campaign_id = { [this.Op.in]: campaignIds };
         }
 
         return await this.models.AdImpression.count({ where });
     }
 
-    async calculateClicks(dateRange, campaign_id, advertiser_id) {
+    async calculateClicks(dateRange, campaign_id, campaignIds) {
         const where = {
             created_at: {
                 [this.Op.between]: [dateRange.start, dateRange.end]
@@ -485,16 +549,14 @@ class DashboardController {
 
         if (campaign_id) {
             where.campaign_id = campaign_id;
-        }
-
-        if (advertiser_id) {
-            where.advertiser_id = advertiser_id;
+        } else if (campaignIds && campaignIds.length > 0) {
+            where.campaign_id = { [this.Op.in]: campaignIds };
         }
 
         return await this.models.AdClick.count({ where });
     }
 
-    async calculateConversions(dateRange, campaign_id, advertiser_id) {
+    async calculateConversions(dateRange, campaign_id, campaignIds) {
         const where = {
             created_at: {
                 [this.Op.between]: [dateRange.start, dateRange.end]
@@ -504,21 +566,18 @@ class DashboardController {
 
         if (campaign_id) {
             where.campaign_id = campaign_id;
-        }
-
-        if (advertiser_id) {
-            where.advertiser_id = advertiser_id;
+        } else if (campaignIds && campaignIds.length > 0) {
+            where.campaign_id = { [this.Op.in]: campaignIds };
         }
 
         return await this.models.AdConversion.count({ where });
     }
 
     // Получение изменений по сравнению с предыдущим периодом
-    async getChangeMetrics(period, campaign_id, advertiser_id) {
-        // Используем includeChange = false чтобы избежать бесконечной рекурсии
+    async getChangeMetrics(period, campaign_id, advertiserId) {
         const [current, previous] = await Promise.all([
-            this.getOverviewMetrics(period, campaign_id, advertiser_id, false),
-            this.getOverviewMetrics(this.getPreviousPeriod(period), campaign_id, advertiser_id, false)
+            this.getOverviewMetrics(period, campaign_id, advertiserId, false),
+            this.getOverviewMetrics(this.getPreviousPeriod(period), campaign_id, advertiserId, false)
         ]);
 
         return {
@@ -597,74 +656,168 @@ class DashboardController {
         return this.getDateRange(period).start;
     }
 
-    async getTotalCampaigns() {
-        return await this.models.Campaign.count();
+    async getTotalCampaigns(advertiserId = null) {
+        const where = {};
+        if (advertiserId) {
+            where.advertiser_id = advertiserId;
+        }
+        return await this.models.Campaign.count({ where });
     }
 
-    async getActiveCampaignsCount() {
-        return await this.models.Campaign.count({
-            where: { status: 'active' }
-        });
+    async getActiveCampaignsCount(advertiserId = null) {
+        const where = { status: 'active' };
+        if (advertiserId) {
+            where.advertiser_id = advertiserId;
+        }
+        return await this.models.Campaign.count({ where });
     }
+
 
     // Методы для получения реальных данных
-    async getRecentSessionsCount(since) {
-        return await this.models.Session.count({
-            where: {
-                created_at: { [this.Op.gte]: since }
-            }
-        });
-    }
-
-    async getRecentImpressionsCount(since) {
-        return await this.models.AdImpression.count({
-            where: {
-                created_at: { [this.Op.gte]: since }
-            }
-        });
-    }
-
-    async getRecentClicksCount(since) {
-        return await this.models.AdClick.count({
-            where: {
-                created_at: { [this.Op.gte]: since }
-            }
-        });
-    }
-
-    async getRecentConversionsCount(since) {
-        return await this.models.AdConversion.count({
-            where: {
-                created_at: { [this.Op.gte]: since },
-                status: 'confirmed'
-            }
-        });
-    }
-
-    async getActiveSessionsCount() {
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-        return await this.models.Session.count({
-            where: {
-                created_at: { [this.Op.gte]: fiveMinutesAgo }
-            }
-        });
-    }
-
-    async getPeakHour() {
-        // Простая реализация - возвращаем текущий час
-        return {
-            hour: new Date().getHours(),
-            impressions: await this.getImpressionsInLastHour()
+    async getRecentSessionsCount(since, campaignIds = null) {
+        const where = {
+            created_at: { [this.Op.gte]: since }
         };
+
+        if (campaignIds && campaignIds.length > 0) {
+            const impressions = await this.models.AdImpression.findAll({
+                attributes: ['session_id'],
+                where: {
+                    campaign_id: { [this.Op.in]: campaignIds },
+                    created_at: { [this.Op.gte]: since }
+                },
+                raw: true
+            });
+            
+            const sessionIds = [...new Set(impressions.map(imp => imp.session_id))];
+            if (sessionIds.length > 0) {
+                where.session_id = { [this.Op.in]: sessionIds };
+            } else {
+                return 0;
+            }
+        }
+
+        return await this.models.Session.count({ where });
     }
 
-    async getImpressionsInLastHour() {
-        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-        return await this.models.AdImpression.count({
-            where: {
-                created_at: { [this.Op.gte]: oneHourAgo }
+    async getRecentImpressionsCount(since, campaignIds = null) {
+        const where = {
+            created_at: { [this.Op.gte]: since }
+        };
+
+        if (campaignIds && campaignIds.length > 0) {
+            where.campaign_id = { [this.Op.in]: campaignIds };
+        }
+
+        return await this.models.AdImpression.count({ where });
+    }
+
+    async getRecentClicksCount(since, campaignIds = null) {
+        const where = {
+            created_at: { [this.Op.gte]: since }
+        };
+
+        if (campaignIds && campaignIds.length > 0) {
+            where.campaign_id = { [this.Op.in]: campaignIds };
+        }
+
+        return await this.models.AdClick.count({ where });
+    }
+
+    async getRecentConversionsCount(since, campaignIds = null) {
+        const where = {
+            created_at: { [this.Op.gte]: since },
+            status: 'confirmed'
+        };
+
+        if (campaignIds && campaignIds.length > 0) {
+            where.campaign_id = { [this.Op.in]: campaignIds };
+        }
+
+        return await this.models.AdConversion.count({ where });
+    }
+
+    async getActiveSessionsCount(campaignIds = null) {
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        const where = {
+            created_at: { [this.Op.gte]: fiveMinutesAgo }
+        };
+
+        if (campaignIds && campaignIds.length > 0) {
+            const impressions = await this.models.AdImpression.findAll({
+                attributes: ['session_id'],
+                where: {
+                    campaign_id: { [this.Op.in]: campaignIds },
+                    created_at: { [this.Op.gte]: fiveMinutesAgo }
+                },
+                raw: true
+            });
+            
+            const sessionIds = [...new Set(impressions.map(imp => imp.session_id))];
+            if (sessionIds.length > 0) {
+                where.session_id = { [this.Op.in]: sessionIds };
+            } else {
+                return 0;
             }
-        });
+        }
+
+        return await this.models.Session.count({ where });
+    }
+
+    async getPeakHour(campaignIds = null) {
+        try {
+            const where = {};
+            if (campaignIds && campaignIds.length > 0) {
+                where.campaign_id = { [this.Op.in]: campaignIds };
+            }
+
+            const result = await this.models.AdImpression.findAll({
+                attributes: [
+                    [Sequelize.fn('HOUR', Sequelize.col('created_at')), 'hour'],
+                    [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
+                ],
+                where: {
+                    created_at: {
+                        [this.Op.gte]: new Date(Date.now() - 24 * 60 * 60 * 1000)
+                    },
+                    ...where
+                },
+                group: ['hour'],
+                order: [[Sequelize.literal('count'), 'DESC']],
+                limit: 1,
+                raw: true
+            });
+
+            if (result.length > 0) {
+                return {
+                    hour: result[0].hour,
+                    impressions: result[0].count
+                };
+            }
+
+            return {
+                hour: new Date().getHours(),
+                impressions: await this.getImpressionsInLastHour(campaignIds)
+            };
+        } catch (error) {
+            return {
+                hour: new Date().getHours(),
+                impressions: 0
+            };
+        }
+    }
+
+    async getImpressionsInLastHour(campaignIds = null) {
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        const where = {
+            created_at: { [this.Op.gte]: oneHourAgo }
+        };
+
+        if (campaignIds && campaignIds.length > 0) {
+            where.campaign_id = { [this.Op.in]: campaignIds };
+        }
+
+        return await this.models.AdImpression.count({ where });
     }
 
     // Fallback методы (для тестирования)
@@ -888,50 +1041,77 @@ class DashboardController {
     }
 
     // Дополнительные методы для детализированных запросов
-    async getSessionsCount(dateRange, campaign_id) {
+    async getSessionsCount(dateRange, campaign_id, campaignIds) {
         const where = {
             created_at: { [this.Op.between]: [dateRange.start, dateRange.end] }
         };
 
         if (campaign_id) {
-            const sequelizeInstance = this.sequelize || this.Sequelize;
-            where.session_id = {
-                [this.Op.in]: sequelizeInstance.literal(`(
-                    SELECT DISTINCT session_id 
-                    FROM analytics_ad_impressions 
-                    WHERE campaign_id = ${parseInt(campaign_id)}
-                )`)
-            };
+            const impressions = await this.models.AdImpression.findAll({
+                attributes: ['session_id'],
+                where: {
+                    campaign_id: campaign_id,
+                    created_at: { [this.Op.between]: [dateRange.start, dateRange.end] }
+                },
+                raw: true
+            });
+            
+            const sessionIds = [...new Set(impressions.map(imp => imp.session_id))];
+            if (sessionIds.length > 0) {
+                where.session_id = { [this.Op.in]: sessionIds };
+            } else {
+                return 0;
+            }
+        } else if (campaignIds && campaignIds.length > 0) {
+            const impressions = await this.models.AdImpression.findAll({
+                attributes: ['session_id'],
+                where: {
+                    campaign_id: { [this.Op.in]: campaignIds },
+                    created_at: { [this.Op.between]: [dateRange.start, dateRange.end] }
+                },
+                raw: true
+            });
+            
+            const sessionIds = [...new Set(impressions.map(imp => imp.session_id))];
+            if (sessionIds.length > 0) {
+                where.session_id = { [this.Op.in]: sessionIds };
+            } else {
+                return 0;
+            }
         }
 
         return await this.models.Session.count({ where });
     }
 
-    async getImpressionsCount(dateRange, campaign_id) {
+    async getImpressionsCount(dateRange, campaign_id, campaignIds) {
         const where = {
             created_at: { [this.Op.between]: [dateRange.start, dateRange.end] }
         };
 
         if (campaign_id) {
             where.campaign_id = campaign_id;
+        } else if (campaignIds && campaignIds.length > 0) {
+            where.campaign_id = { [this.Op.in]: campaignIds };
         }
 
         return await this.models.AdImpression.count({ where });
     }
 
-    async getClicksCount(dateRange, campaign_id) {
+    async getClicksCount(dateRange, campaign_id, campaignIds) {
         const where = {
             created_at: { [this.Op.between]: [dateRange.start, dateRange.end] }
         };
 
         if (campaign_id) {
             where.campaign_id = campaign_id;
+        } else if (campaignIds && campaignIds.length > 0) {
+            where.campaign_id = { [this.Op.in]: campaignIds };
         }
 
         return await this.models.AdClick.count({ where });
     }
 
-    async getConversionsCount(dateRange, campaign_id) {
+    async getConversionsCount(dateRange, campaign_id, campaignIds) {
         const where = {
             created_at: { [this.Op.between]: [dateRange.start, dateRange.end] },
             status: 'confirmed'
@@ -939,34 +1119,48 @@ class DashboardController {
 
         if (campaign_id) {
             where.campaign_id = campaign_id;
+        } else if (campaignIds && campaignIds.length > 0) {
+            where.campaign_id = { [this.Op.in]: campaignIds };
         }
 
         return await this.models.AdConversion.count({ where });
     }
 
-    async getImpressionsInPeriod(start, end) {
-        return await this.models.AdImpression.count({
-            where: {
-                created_at: { [this.Op.between]: [start, end] }
-            }
-        });
+    async getImpressionsInPeriod(start, end, campaignIds = null) {
+        const where = {
+            created_at: { [this.Op.between]: [start, end] }
+        };
+
+        if (campaignIds && campaignIds.length > 0) {
+            where.campaign_id = { [this.Op.in]: campaignIds };
+        }
+
+        return await this.models.AdImpression.count({ where });
     }
 
-    async getClicksInPeriod(start, end) {
-        return await this.models.AdClick.count({
-            where: {
-                created_at: { [this.Op.between]: [start, end] }
-            }
-        });
+    async getClicksInPeriod(start, end, campaignIds = null) {
+        const where = {
+            created_at: { [this.Op.between]: [start, end] }
+        };
+
+        if (campaignIds && campaignIds.length > 0) {
+            where.campaign_id = { [this.Op.in]: campaignIds };
+        }
+
+        return await this.models.AdClick.count({ where });
     }
 
-    async getConversionsInPeriod(start, end) {
-        return await this.models.AdConversion.count({
-            where: {
-                created_at: { [this.Op.between]: [start, end] },
-                status: 'confirmed'
-            }
-        });
+    async getConversionsInPeriod(start, end, campaignIds = null) {
+        const where = {
+            created_at: { [this.Op.between]: [start, end] },
+            status: 'confirmed'
+        };
+
+        if (campaignIds && campaignIds.length > 0) {
+            where.campaign_id = { [this.Op.in]: campaignIds };
+        }
+
+        return await this.models.AdConversion.count({ where });
     }
 
     async getUVBySegment(dateRange, segment) {

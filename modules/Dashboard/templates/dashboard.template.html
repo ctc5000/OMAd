@@ -329,12 +329,78 @@
     .metric-value {
       font-size: 1.8rem;
     }
+
+    .auth-warning {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 20px 0;
+    text-align: center;
+    display: none;
+  }
+
+    .logout-btn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    padding: 8px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  
+  .logout-btn:hover {
+    background: rgba(255, 255, 255, 0.4);
+  }
+  
+  .user-info {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    font-size: 0.9rem;
+    opacity: 0.8;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
   }
 </style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
 <div class="dashboard">
+  <!-- Кнопка выхода и информация о пользователе -->
+  <div class="user-info">
+    <i class="fas fa-user"></i>
+    <span id="userEmail">Загрузка...</span>
+    <span id="userRole" style="font-size: 0.8rem; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px;">
+      Загрузка...
+    </span>
+  </div>
+  
+  <button class="logout-btn" id="logoutBtn">
+    <i class="fas fa-sign-out-alt"></i> Выйти
+  </button>
+
+  <!-- Предупреждение об авторизации -->
+  <div id="authWarning" class="auth-warning">
+    <i class="fas fa-exclamation-triangle"></i>
+    <span id="authWarningText">Ошибка авторизации</span>
+    <button id="retryAuthBtn" style="margin-left: 10px; padding: 5px 10px; background: rgba(255,255,255,0.2); border: none; color: white; border-radius: 4px; cursor: pointer;">
+      Попробовать снова
+    </button>
+    <button id="goToLoginBtn" style="margin-left: 5px; padding: 5px 10px; background: rgba(46, 204, 113, 0.2); border: none; color: white; border-radius: 4px; cursor: pointer;">
+      Войти
+    </button>
+  </div>
+  
   <div class="header">
     <h1><i class="fas fa-chart-line"></i> Order Master Analytics Dashboard</h1>
     <p>Система аналитики рекламных кампаний в реальном времени</p>
@@ -360,12 +426,11 @@
   </div>
 
   <!-- Секция для генерации отчётов -->
-  <div class="reports-section">
+  <div class="reports-section" style="display: none;" id="reportsSection">
     <div class="reports-title">
-      <i class="fas fa-file-export"></i> Экспорт отчётов (MVP Тест)
+      <i class="fas fa-file-export"></i> Экспорт отчётов
     </div>
     
-    <!-- Новый блок выбора диапазона дат -->
     <div class="date-range-selector">
       <div class="date-range-buttons">
         <button class="date-range-btn active" data-period="today">Сегодня</button>
@@ -375,16 +440,16 @@
     </div>
     
     <div class="reports-buttons">
-      <button class="report-btn pdf" id="generate-pdf-btn" onclick="generateReport('pdf')">
+      <button class="report-btn pdf" id="generate-pdf-btn">
         <i class="fas fa-file-pdf"></i> Скачать PDF
       </button>
-      <button class="report-btn excel" id="generate-excel-btn" onclick="generateReport('excel')">
+      <button class="report-btn excel" id="generate-excel-btn">
         <i class="fas fa-file-excel"></i> Скачать Excel
       </button>
     </div>
      <div class="reports-info">
        <i class="fas fa-info-circle"></i> 
-       Кликните на строку в таблице кампаний ниже, чтобы выбрать кампанию для отчёта (или будет использована первая кампания по умолчанию).
+       Кликните на строку в таблице кампаний ниже, чтобы выбрать кампанию для отчёта.
        Период: выберите диапазон дат.
      </div>
   </div>
@@ -399,30 +464,154 @@
   let currentPeriod = 'today';
   let refreshInterval;
   let selectedCampaignId = null;
-  
-  // Загрузка данных
+  let selectedPeriod = 'today';
+  // let userData = {};
+
+  // Проверка авторизации
+   // Функция для проверки авторизации
+   async function checkAuth() {
+    const token = localStorage.getItem('authToken');
+    
+    if (!token) {
+      console.log('❌ Токен не найден в localStorage');
+      showAuthError('Требуется авторизация');
+      return null;
+    }
+    
+    try {
+      const response = await fetch('/api/auth/validate', {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer ' + token
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Token invalid');
+      }
+      
+      const data = await response.json();
+      if (data.success) {
+        console.log('✅ Токен валиден');
+        return data.user;
+      } else {
+        throw new Error('Token validation failed');
+      }
+    } catch (error) {
+      console.log('❌ Ошибка проверки токена:', error.message);
+      logout();
+      return null;
+    }
+  }
+
+   // Показать ошибку авторизации
+   function showAuthError(message) {
+    document.getElementById('authWarningText').textContent = message;
+    document.getElementById('authWarning').style.display = 'block';
+    document.getElementById('dashboard-content').style.display = 'none';
+    document.getElementById('reportsSection').style.display = 'none';
+    document.getElementById('loading').style.display = 'none';
+  }
+
+  // Скрыть ошибку авторизации
+  function hideAuthError() {
+    document.getElementById('authWarning').style.display = 'none';
+  }
+
+  // Загрузка данных пользователя
+  // async function loadUserData() {
+  //   if (!checkAuth()) return;
+    
+  //   const token = localStorage.getItem('authToken');
+  //   try {
+  //     const response = await fetch('/api/auth/validate', {
+  //       headers: {
+  //         'Authorization': 'Bearer ' + token
+  //       }
+  //     });
+      
+  //     if (response.status === 401) {
+  //       logout();
+  //       return;
+  //     }
+      
+  //     const data = await response.json();
+  //     if (data.success) {
+  //       userData = data.user;
+  //       document.getElementById('userEmail').textContent = userData.email || 'Пользователь';
+  //       document.getElementById('userRole').textContent = userData.role === 'ADMIN' ? 'Администратор' : 'Рекламодатель';
+  //     }
+  //   } catch (error) {
+  //     console.error('Error loading user data:', error);
+  //   }
+  // }
+
+  // Загрузка данных пользователя
+  async function loadUserData(user) {
+    if (!user) return;
+    
+    document.getElementById('userEmail').textContent = user.email || 'Пользователь';
+    document.getElementById('userRole').textContent = user.role === 'ADMIN' ? 'Администратор' : 'Рекламодатель';
+  }
+
+  // Загрузка данных дашборда
+  // Загрузка данных дашборда
   async function loadDashboardData(period = 'today') {
+    const token = localStorage.getItem('authToken');
+    
+    if (!token) {
+      showAuthError('Требуется авторизация');
+      return;
+    }
+    
     try {
       document.getElementById('loading').style.display = 'block';
       document.getElementById('dashboard-content').style.display = 'none';
       
-      const response = await fetch('/api/dashboard/data?period=' + period);
+      const response = await fetch('/api/dashboard/data?period=' + period, {
+        headers: {
+          'Authorization': 'Bearer ' + token
+        }
+      });
+      
+      if (response.status === 401) {
+        logout();
+        return;
+      }
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+      
       const result = await response.json();
       
       if (result.success) {
         renderDashboard(result.data);
+        hideAuthError();
         document.getElementById('loading').style.display = 'none';
         document.getElementById('dashboard-content').style.display = 'block';
+        document.getElementById('reportsSection').style.display = 'block';
         updateLastUpdateTime();
+      } else {
+        throw new Error(result.error || 'Ошибка загрузки данных');
       }
     } catch (error) {
-      console.error('Ошибка загрузки данных:', error);
+      console.error('❌ Ошибка загрузки данных:', error);
       document.getElementById('loading').innerHTML = 
-        '<i class="fas fa-exclamation-triangle"></i> Ошибка загрузки данных';
+        '<i class="fas fa-exclamation-triangle"></i> Ошибка загрузки данных: ' + error.message;
     }
   }
-  
-  // Рендеринг дашборда
+
+  // Выход из системы
+  function logout() {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('userRole');
+    localStorage.removeItem('userId');
+    localStorage.removeItem('advertiserId');
+    window.location.href = '/login';
+  }
+
+  // Рендеринг дашборда (остается без изменений)
   function renderDashboard(data) {
     const container = document.getElementById('dashboard-content');
     
@@ -520,6 +709,12 @@
             '</tbody>' +
           '</table>' +
         '</div>';
+    } else {
+      campaignsHtml = 
+        '<div class="table-card">' +
+          '<h2 class="chart-title"><i class="fas fa-trophy"></i> Топ кампаний по конверсиям</h2>' +
+          '<p style="text-align: center; padding: 20px; opacity: 0.7;">Нет данных о кампаниях</p>' +
+        '</div>';
     }
     
     // Воронка конверсий
@@ -580,27 +775,124 @@
         '<div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">' +
           '<div><i class="fas fa-calendar"></i> Период: ' + (data.summary.period === 'today' ? 'Сегодня' : data.summary.period) + '</div>' +
           '<div><i class="fas fa-rocket"></i> Активных кампаний: ' + data.summary.active_campaigns + ' из ' + data.summary.total_campaigns + '</div>' +
-          '<div><i class="fas fa-clock"></i> Пиковый час: ' + data.realtime.peak_hour.hour + ':00 (' + data.realtime.peak_hour.impressions + ' показов)</div>' +
-          '<div><i class="fas fa-users"></i> Активных сессий: ' + data.realtime.active_sessions + '</div>' +
+          (data.realtime ? 
+            '<div><i class="fas fa-clock"></i> Пиковый час: ' + data.realtime.peak_hour.hour + ':00 (' + data.realtime.peak_hour.impressions + ' показов)</div>' +
+            '<div><i class="fas fa-users"></i> Активных сессий: ' + data.realtime.active_sessions + '</div>' 
+          : '') +
         '</div>' +
       '</div>';
     
     container.innerHTML = metricsHtml + summaryHtml + funnelHtml + campaignsHtml;
   }
-  
+
   // Обновление времени последнего обновления
   function updateLastUpdateTime() {
     const now = new Date();
     const timeString = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     document.getElementById('last-update').textContent = timeString;
   }
-  
+
+  // Функция для выбора кампании
+  function selectCampaign(campaignId) {
+    selectedCampaignId = campaignId;
+    document.querySelectorAll('tr[data-campaign-id]').forEach(row => {
+      row.style.background = '';
+    });
+    
+    const selectedRow = document.querySelector('tr[data-campaign-id="' + campaignId + '"]');
+    if (selectedRow) {
+      selectedRow.style.background = 'rgba(102, 126, 234, 0.3)';
+    }
+    console.log('✅ Выбрана кампания: ' + campaignId);
+  }
+
+  // Генерация отчета
+  async function generateReport(format) {
+    if (!checkAuth()) return;
+    
+    const btnId = 'generate-' + format + '-btn';
+    const btn = document.getElementById(btnId);
+    btn.disabled = true;
+    btn.classList.add('report-btn-loading');
+    
+    try {
+      let campaignId = selectedCampaignId;
+      
+      if (!campaignId) {
+        const firstCampaignRow = document.querySelector('tr[data-campaign-id]');
+        if (firstCampaignRow) {
+          campaignId = firstCampaignRow.getAttribute('data-campaign-id');
+          selectCampaign(campaignId);
+        }
+      }
+      
+      if (!campaignId) {
+        alert('⚠️ Пожалуйста, выберите кампанию из таблицы');
+        return;
+      }
+
+      const token = localStorage.getItem('authToken');
+      const url = '/api/reports/campaign/' + campaignId + '/' + format + '?period=' + selectedPeriod;
+      
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': 'Bearer ' + token
+        }
+      });
+      
+      if (response.status === 401) {
+        logout();
+        return;
+      }
+      
+      if (!response.ok) {
+        throw new Error('Ошибка генерации отчета');
+      }
+      
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      link.download = 'report_campaign_' + campaignId + '_' + selectedPeriod + '_' + todayStr + '.' + (format === 'pdf' ? 'pdf' : 'xlsx');
+      
+      document.body.appendChild(link);
+      link.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.body.removeChild(link);
+
+      alert('✅ Отчёт ' + format.toUpperCase() + ' для кампании ' + campaignId + ' за период "' + selectedPeriod + '" успешно загружен!');
+    } catch (error) {
+      console.error('❌ Ошибка при генерации отчёта:', error);
+      alert('❌ Ошибка: ' + error.message);
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove('report-btn-loading');
+    }
+  }
+
   // Инициализация
-  document.addEventListener('DOMContentLoaded', function() {
+  document.addEventListener('DOMContentLoaded', async function() {
+    console.log('🚀 Инициализация дашборда...');
+    
+    // Проверяем авторизацию
+    const user = await checkAuth();
+    
+    if (!user) {
+      // Если нет авторизации, показываем ошибку
+      showAuthError('Требуется авторизация. Пожалуйста, войдите в систему.');
+      return;
+    }
+    
+    // Загружаем данные пользователя
+    loadUserData(user);
+    
     // Загрузка данных при загрузке страницы
     loadDashboardData(currentPeriod);
     
-    // Обработчики кнопок периода
+    // Обработчики кнопок периода дашборда
     document.querySelectorAll('.period-btn').forEach(btn => {
       btn.addEventListener('click', function() {
         document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
@@ -608,6 +900,35 @@
         currentPeriod = this.dataset.period;
         loadDashboardData(currentPeriod);
       });
+    });
+    
+    // Обработчики кнопок периода отчетов
+    document.querySelectorAll('.date-range-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.date-range-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        selectedPeriod = this.dataset.period;
+        console.log('✅ Выбран период для отчетов: ' + selectedPeriod);
+      });
+    });
+    
+    // Обработчики кнопок генерации отчетов
+    document.getElementById('generate-pdf-btn').addEventListener('click', () => generateReport('pdf'));
+    document.getElementById('generate-excel-btn').addEventListener('click', () => generateReport('excel'));
+    
+    // Кнопка выхода
+    document.getElementById('logoutBtn').addEventListener('click', logout);
+    
+    // Кнопки повторной авторизации
+    document.getElementById('retryAuthBtn').addEventListener('click', async () => {
+      const user = await checkAuth();
+      if (user) {
+        loadDashboardData(currentPeriod);
+      }
+    });
+    
+    document.getElementById('goToLoginBtn').addEventListener('click', () => {
+      window.location.href = '/login';
     });
     
     // Автообновление каждые 30 секунд
@@ -621,116 +942,6 @@
     if (refreshInterval) {
       clearInterval(refreshInterval);
     }
-  });
-
-  // Функция для выбора кампании
-  function selectCampaign(campaignId) {
-    selectedCampaignId = campaignId;
-    // Убрать выделение со всех строк
-    document.querySelectorAll('tr[data-campaign-id]').forEach(row => {
-      row.style.background = '';
-    });
-    // Выделить выбранную строку
-    const selectedRow = document.querySelector('tr[data-campaign-id="' + campaignId + '"]');
-    if (selectedRow) {
-      selectedRow.style.background = 'rgba(102, 126, 234, 0.3)';
-    }
-    console.log('✅ Выбрана кампания: ' + campaignId);
-  }
-
-  // Глобальная переменная для хранения выбранного периода
-  var selectedPeriod = 'today';
-
-  // Функция для генерации отчёта
-  function generateReport(format) {
-    var btnId = 'generate-' + format + '-btn';
-    var btn = document.getElementById(btnId);
-    btn.disabled = true;
-    btn.classList.add('report-btn-loading');
-    
-    function handleReportGeneration() {
-      var campaignId = selectedCampaignId;
-      
-      if (!campaignId) {
-        var firstCampaignRow = document.querySelector('tr[data-campaign-id]');
-        if (firstCampaignRow) {
-          campaignId = firstCampaignRow.getAttribute('data-campaign-id');
-          selectCampaign(campaignId);
-        }
-      }
-      
-      if (!campaignId) {
-        campaignId = prompt('Введите ID кампании:');
-      }
-
-      if (!campaignId || isNaN(campaignId)) {
-        alert('⚠️ Пожалуйста, выберите кампанию из таблицы ниже или укажите ID кампании вручную.');
-        btn.disabled = false;
-        btn.classList.remove('report-btn-loading');
-        return;
-      }
-
-      var url = '/api/reports/campaign/' + campaignId + '/' + format + '?period=' + selectedPeriod;
-      
-      console.log('📥 Загрузка ' + format.toUpperCase() + ' отчёта...');
-      console.log('   URL: ' + url);
-      console.log('   Период: ' + selectedPeriod);
-
-      fetch(url)
-        .then(function(response) {
-          if (!response.ok) {
-            return response.json().then(function(errorData) {
-              throw new Error(errorData.error || 'Ошибка ' + response.status + ': ' + response.statusText);
-            });
-          }
-          return response.blob();
-        })
-        .then(function(blob) {
-          var downloadUrl = window.URL.createObjectURL(blob);
-          var link = document.createElement('a');
-          link.href = downloadUrl;
-          
-          var today = new Date();
-          var todayStr = today.toISOString().split('T')[0];
-          link.download = 'report_campaign_' + campaignId + '_' + selectedPeriod + '_' + todayStr + '.' + (format === 'pdf' ? 'pdf' : 'xlsx');
-          
-          document.body.appendChild(link);
-          link.click();
-          window.URL.revokeObjectURL(downloadUrl);
-          document.body.removeChild(link);
-
-          console.log('✅ Отчёт успешно загружен!');
-          alert('✅ Отчёт ' + format.toUpperCase() + ' для кампании ' + campaignId + ' за период "' + selectedPeriod + '" успешно загружен!');
-        })
-        .catch(function(error) {
-          console.error('❌ Ошибка при генерации ' + format.toUpperCase() + ' отчёта:', error);
-          alert('❌ Ошибка: ' + error.message);
-        })
-        .finally(function() {
-          btn.disabled = false;
-          btn.classList.remove('report-btn-loading');
-        });
-    }
-
-    handleReportGeneration();
-  }
-
-  // Обработчики кнопок периода
-  document.addEventListener('DOMContentLoaded', function() {
-    var dateRangeBtns = document.querySelectorAll('.date-range-btn');
-    
-    dateRangeBtns.forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        dateRangeBtns.forEach(function(b) {
-          b.classList.remove('active');
-        });
-        
-        this.classList.add('active');
-        selectedPeriod = this.dataset.period;
-        
-        console.log('✅ Выбран период: ' + selectedPeriod);
-      });
-    });
   });
 </script>
 </body>

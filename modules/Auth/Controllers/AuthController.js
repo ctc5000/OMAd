@@ -1,11 +1,11 @@
+// AuthController.js
 const AuthService = require('../services/AuthService');
 
 class AuthController {
     constructor(models, sequelize) {
         console.log('🚀 Инициализация AuthController');
         console.log('📦 Доступные модели:', Object.keys(models));
-        console.log('📊 Sequelize:', !!sequelize);
-
+        
         this.models = models;
         this.sequelize = sequelize;
         
@@ -16,6 +16,8 @@ class AuthController {
     async login(req, res) {
         const { email, password } = req.body;
 
+        console.log('🔐 Запрос на логин:', { email });
+
         if (!email || !password) {
             return res.status(400).json({
                 success: false,
@@ -24,11 +26,20 @@ class AuthController {
         }
 
         try {
-            const token = await this.authService.login(email, password);
+            const { user, token } = await this.authService.login(email, password);
+            
+            console.log('✅ Логин успешен:', { 
+                userId: user.id, 
+                role: user.role,
+                advertiserId: user.advertiser_id 
+            });
             
             return res.status(200).json({
                 success: true,
-                token
+                token,
+                role: user.role,
+                userId: user.id,
+                advertiserId: user.advertiser_id // Используем правильное поле
             });
         } catch (error) {
             console.error('Login error:', error);
