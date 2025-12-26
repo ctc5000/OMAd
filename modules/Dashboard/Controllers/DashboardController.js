@@ -75,66 +75,443 @@ class DashboardController {
         }
     }
 
-    // Метрики обзора
-    async getOverviewMetrics(period = 'today', campaign_id, advertiserId, includeChange = true) {
-        const dateRange = this.getDateRange(period);
-
+    // Основные метрики для обзора
+    async getOverviewMetrics(period = 'today', campaignId = null, advertiserId = null) {
         try {
-            // Получаем campaign_ids для данного advertiser
-            const campaignIds = advertiserId ? await this.getCampaignIdsByAdvertiser(advertiserId) : null;
-
-            const [
-                uv,
-                reach,
-                impressions,
-                clicks,
-                conversions,
-                campaignsData
-            ] = await Promise.all([
-                this.calculateUV(dateRange, campaign_id, campaignIds),
-                this.calculateReach(dateRange, campaign_id, campaignIds),
-                this.calculateImpressions(dateRange, campaign_id, campaignIds),
-                this.calculateClicks(dateRange, campaign_id, campaignIds),
-                this.calculateConversions(dateRange, campaign_id, campaignIds),
-                this.getCampaignCosts(campaign_id, advertiserId)
-            ]);
-
-            // Производные метрики
-            const ctr = impressions > 0 ? parseFloat((clicks / impressions * 100).toFixed(2)) : 0;
-            const cr = reach > 0 ? parseFloat((conversions / reach * 100).toFixed(2)) : 0;
+            console.log(`📊 Получение overview метрик: период=${period}, campaign=${campaignId || 'все'}, advertiser=${advertiserId || 'все'}`);
             
-            // Стоимостные метрики
-            let cpuv = null, cpc = null, cpl = null;
-            if (campaignsData) {
-                cpuv = campaignsData.cost_per_uv ? parseFloat(campaignsData.cost_per_uv) : null;
-                cpc = campaignsData.cost_per_click ? parseFloat(campaignsData.cost_per_click) : null;
-                cpl = campaignsData.cost_per_lead ? parseFloat(campaignsData.cost_per_lead) : null;
-            }
-
-            const result = {
-                uv: parseInt(uv) || 0,
-                reach: parseInt(reach) || 0,
-                impressions: parseInt(impressions) || 0,
-                clicks: parseInt(clicks) || 0,
-                conversions: parseInt(conversions) || 0,
-                ctr: parseFloat(ctr) || 0,
-                cr: parseFloat(cr) || 0,
-                cpuv: cpuv,
-                cpc: cpc,
-                cpl: cpl
+            // Определяем даты периода
+            const periodDates = this.getPeriodDates(period);
+            const startDate = periodDates.startDate;
+            const endDate = periodDates.endDate;
+            
+            // Определяем предыдущий период для сравнения
+            const previousPeriodDates = this.getPreviousPeriodDates(period);
+            const previousStartDate = previousPeriodDates.startDate;
+            const previousEndDate = previousPeriodDates.endDate;
+    
+            // Получаем метрики текущего периода через getMetrics логику
+            const currentMetrics = await this.calculateMetrics(startDate, endDate, campaignId, advertiserId);
+            
+            // Получаем метрики предыдущего периода
+            const previousMetrics = await this.calculateMetrics(previousStartDate, previousEndDate, campaignId, advertiserId);
+    
+            // Рассчитываем изменения в процентах
+            const calculateChange = (current, previous) => {
+                if (previous === 0) return current > 0 ? 100 : 0;
+                return ((current - previous) / previous) * 100;
             };
-
-            // Добавляем изменения если не рекурсивный вызов
-            if (includeChange) {
-                result.change = await this.getChangeMetrics(period, campaign_id, advertiserId);
+    
+            const change = {
+                uv_change: parseFloat(calculateChange(currentMetrics.uv, previousMetrics.uv).toFixed(2)),
+                impressions_change: parseFloat(calculateChange(currentMetrics.impressions, previousMetrics.impressions).toFixed(2)),
+                clicks_change: parseFloat(calculateChange(currentMetrics.clicks, previousMetrics.clicks).toFixed(2)),
+                conversions_change: parseFloat(calculateChange(currentMetrics.conversions, previousMetrics.conversions).toFixed(2)),
+                ctr_change: parseFloat(calculateChange(currentMetrics.ctr, previousMetrics.ctr).toFixed(2)),
+                cr_change: parseFloat(calculateChange(currentMetrics.cr, previousMetrics.cr).toFixed(2))
+            };
+    
+            // Для общего обзора (без campaignId) получаем агрегированные данные по всем кампаниям
+            let budgetStatus = currentMetrics.budget_status;
+            let targets = currentMetrics.targets;
+            
+            // Если не выбрана конкретная кампания, получаем агрегированные данные
+            if (!campaignId && advertiserId) {
+                budgetStatus = await this.getAggregatedBudgetStatus(advertiserId);
+                targets = await this.getAggregatedTargets(advertiserId);
             }
-
-            return result;
+    
+            // Формируем объект в формате, ожидаемом дашбордом
+            const overviewData = {
+                uv: currentMetrics.uv || 0,
+                reach: currentMetrics.reach || 0,
+                impressions: currentMetrics.impressions || 0,
+                clicks: currentMetrics.clicks || 0,
+                conversions: currentMetrics.conversions || 0,
+                ctr: currentMetrics.ctr || 0,
+                cr: currentMetrics.cr || 0,
+                cpuv: currentMetrics.cpu_v || 0,
+                cpc: currentMetrics.cpc || 0,
+                cpl: currentMetrics.cpl || 0,
+                change: change,
+                budget_status: budgetStatus,
+                targets: targets
+            };
+    
+            console.log('✅ Overview метрики собраны:', overviewData);
+    
+            return overviewData;
+            
         } catch (error) {
-            console.error('Ошибка расчета overview метрик:', error);
-            return this.getFallbackMetrics();
+            console.error('❌ Ошибка в getOverviewMetrics:', error);
+            
+            return {
+                uv: 0,
+                reach: 0,
+                impressions: 0,
+                clicks: 0,
+                conversions: 0,
+                ctr: 0,
+                cr: 0,
+                cpuv: 0,
+                cpc: 0,
+                cpl: 0,
+                change: {
+                    uv_change: 0,
+                    impressions_change: 0,
+                    clicks_change: 0,
+                    conversions_change: 0,
+                    ctr_change: 0,
+                    cr_change: 0
+                },
+                budget_status: null,
+                targets: null
+            };
         }
     }
+
+    // Новые методы для агрегированных данных
+async getAggregatedBudgetStatus(advertiserId) {
+    try {
+        if (!this.models.Campaign) return null;
+        
+        const campaigns = await this.models.Campaign.findAll({
+            where: { advertiser_id: advertiserId },
+            attributes: ['budget', 'status', 'cost_per_uv']
+        });
+        
+        if (campaigns.length === 0) return null;
+        
+        let totalBudget = 0;
+        let totalSpent = 0;
+        let activeCampaigns = 0;
+        
+        for (const campaign of campaigns) {
+            totalBudget += parseFloat(campaign.budget || 0);
+            
+            // Оцениваем затраты на основе CPUV * UV (это упрощенная оценка)
+            // В реальном приложении здесь должна быть логика расчета фактических затрат
+            const estimatedSpend = campaign.cost_per_uv ? 
+                campaign.cost_per_uv * 100 : // Упрощенная оценка: умножаем на примерное количество UV
+                parseFloat(campaign.budget || 0) * 0.1; // Или 10% от бюджета
+                
+            totalSpent += estimatedSpend;
+            
+            if (campaign.status === 'active') {
+                activeCampaigns++;
+            }
+        }
+        
+        const remaining = Math.max(0, totalBudget - totalSpent);
+        const utilization = totalBudget > 0 ? 
+            parseFloat((totalSpent / totalBudget * 100).toFixed(2)) : 0;
+        
+        return {
+            total: parseFloat(totalBudget.toFixed(2)),
+            spent: parseFloat(totalSpent.toFixed(2)),
+            remaining: parseFloat(remaining.toFixed(2)),
+            utilization: utilization,
+            status: activeCampaigns > 0 ? 'active' : 'paused',
+            campaign_count: campaigns.length,
+            active_campaigns: activeCampaigns
+        };
+        
+    } catch (error) {
+        console.error('❌ Ошибка в getAggregatedBudgetStatus:', error);
+        return null;
+    }
+}
+
+async getAggregatedTargets(advertiserId) {
+    try {
+        if (!this.models.Campaign) return null;
+        
+        const campaigns = await this.models.Campaign.findAll({
+            where: { advertiser_id: advertiserId },
+            attributes: ['cpu_v_target', 'cpc_target', 'cpl_target']
+        });
+        
+        if (campaigns.length === 0) return null;
+        
+        let cpuVSum = 0;
+        let cpcSum = 0;
+        let cplSum = 0;
+        let campaignsWithTargets = 0;
+        
+        for (const campaign of campaigns) {
+            if (campaign.cpu_v_target && campaign.cpu_v_target > 0) {
+                cpuVSum += campaign.cpu_v_target;
+                campaignsWithTargets++;
+            }
+            if (campaign.cpc_target && campaign.cpc_target > 0) {
+                cpcSum += campaign.cpc_target;
+            }
+            if (campaign.cpl_target && campaign.cpl_target > 0) {
+                cplSum += campaign.cpl_target;
+            }
+        }
+        
+        const cpuVTarget = campaignsWithTargets > 0 ? 
+            parseFloat((cpuVSum / campaignsWithTargets).toFixed(2)) : 0;
+        
+        return {
+            cpu_v_target: cpuVTarget,
+            cpc_target: cpcSum > 0 ? parseFloat((cpcSum / campaigns.length).toFixed(2)) : 0,
+            cpl_target: cplSum > 0 ? parseFloat((cplSum / campaigns.length).toFixed(2)) : 0,
+            campaigns_with_targets: campaignsWithTargets
+        };
+        
+    } catch (error) {
+        console.error('❌ Ошибка в getAggregatedTargets:', error);
+        return null;
+    }
+}
+    
+
+async calculateMetrics(startDate, endDate, campaignId = null, advertiserId = null) {
+    try {
+        // Подготовка where условий как в getMetrics
+        let sessionWhere = {};
+        let eventWhere = {};
+        let sessionIds = [];
+        
+        // Если передан campaignId
+        if (campaignId) {
+            // Находим все session_id, связанные с этой кампанией
+            const impressions = await this.models.AdImpression.findAll({
+                where: { campaign_id: campaignId },
+                attributes: ['session_id'],
+                raw: true
+            });
+            
+            sessionIds = [...new Set(impressions.map(imp => imp.session_id))];
+            
+            if (sessionIds.length > 0) {
+                sessionWhere.session_id = { [this.Sequelize.Op.in]: sessionIds };
+            }
+            
+            eventWhere.campaign_id = campaignId;
+        }
+        
+        // Если передан advertiserId
+        if (advertiserId) {
+            eventWhere.advertiser_id = advertiserId;
+        }
+        
+        // Фильтр по датам
+        const dateFilter = {
+            created_at: {
+                [this.Sequelize.Op.between]: [startDate, endDate]
+            }
+        };
+        sessionWhere = { ...sessionWhere, ...dateFilter };
+        eventWhere = { ...eventWhere, ...dateFilter };
+
+        // Параллельные запросы
+        const [
+            sessions,
+            reachSessions,
+            impressionsCount,
+            clicksCount,
+            conversionsCount
+        ] = await Promise.all([
+            this.models.Session.findAll({
+                where: sessionWhere,
+                attributes: ['session_id', 'restaurant_segment']
+            }),
+            
+            campaignId && sessionIds.length > 0 ? 
+                this.models.Session.findAll({
+                    where: {
+                        session_id: { [this.Sequelize.Op.in]: sessionIds },
+                        ...dateFilter
+                    },
+                    attributes: ['session_id']
+                }) : Promise.resolve([]),
+            
+            this.models.AdImpression.count({ where: eventWhere }),
+            this.models.AdClick.count({ where: eventWhere }),
+            this.models.AdConversion.count({ 
+                where: { 
+                    ...eventWhere,
+                    status: 'confirmed'
+                }
+            })
+        ]);
+
+        // Расчет базовых метрик
+        const uv = sessions.length;
+        const reach = campaignId ? reachSessions.length : uv;
+        const ctr = impressionsCount > 0 ? (clicksCount / impressionsCount) * 100 : 0;
+        const cr = reach > 0 ? (conversionsCount / reach) * 100 : 0;
+
+        // Расчет стоимостных метрик
+        let cpu_v = 0;
+        let cpc = 0;
+        let cpl = 0;
+        let budgetStatus = null;
+        let targets = null;
+
+        if (campaignId && this.models.Campaign) {
+            try {
+                const campaign = await this.models.Campaign.findOne({
+                    where: { id: campaignId }
+                });
+                
+                if (campaign) {
+                    // CPUV
+                    cpu_v = campaign.cost_per_uv && campaign.cost_per_uv > 0 
+                        ? parseFloat(campaign.cost_per_uv)
+                        : (uv > 0 ? (campaign.budget || 0) / uv : 0);
+                    
+                    // CPC
+                    cpc = campaign.cost_per_click && campaign.cost_per_click > 0
+                        ? parseFloat(campaign.cost_per_click)
+                        : (clicksCount > 0 ? (campaign.budget || 0) / clicksCount : 0);
+                    
+                    // CPL
+                    cpl = campaign.cost_per_lead && campaign.cost_per_lead > 0
+                        ? parseFloat(campaign.cost_per_lead)
+                        : (conversionsCount > 0 ? (campaign.budget || 0) / conversionsCount : 0);
+                    
+                    // Статус бюджета
+                    const actualSpend = cpu_v * uv;
+                    budgetStatus = {
+                        total: parseFloat(campaign.budget || 0),
+                        spent: parseFloat(actualSpend),
+                        remaining: parseFloat((campaign.budget || 0) - actualSpend),
+                        utilization: campaign.budget > 0 
+                            ? parseFloat((actualSpend / campaign.budget * 100).toFixed(2)) 
+                            : 0,
+                        status: campaign.status
+                    };
+                    
+                    // Цели
+                    targets = {
+                        cpu_v_target: parseFloat(campaign.cpu_v_target || 0),
+                        cpc_target: parseFloat(campaign.cpc_target || 0),
+                        cpl_target: parseFloat(campaign.cpl_target || 0)
+                    };
+                }
+            } catch (campaignError) {
+                console.warn('Campaign data error:', campaignError.message);
+            }
+        }
+
+        return {
+            uv: uv,
+            reach: Math.min(reach, uv),
+            impressions: impressionsCount,
+            clicks: clicksCount,
+            conversions: conversionsCount,
+            ctr: parseFloat(ctr.toFixed(2)),
+            cr: parseFloat(cr.toFixed(2)),
+            cpu_v: parseFloat(cpu_v.toFixed(2)),
+            cpc: parseFloat(cpc.toFixed(2)),
+            cpl: parseFloat(cpl.toFixed(2)),
+            budget_status: budgetStatus,
+            targets: targets
+        };
+        
+    } catch (error) {
+        console.error('Ошибка в calculateMetrics:', error);
+        return {
+            uv: 0,
+            reach: 0,
+            impressions: 0,
+            clicks: 0,
+            conversions: 0,
+            ctr: 0,
+            cr: 0,
+            cpu_v: 0,
+            cpc: 0,
+            cpl: 0,
+            budget_status: null,
+            targets: null
+        };
+    }
+}
+
+// Вспомогательные методы для работы с периодами
+getPeriodDates(period) {
+    const now = new Date();
+    let startDate = new Date();
+    
+    switch (period) {
+        case 'today':
+            startDate.setHours(0, 0, 0, 0);
+            break;
+        case 'yesterday':
+            startDate.setDate(startDate.getDate() - 1);
+            startDate.setHours(0, 0, 0, 0);
+            now.setDate(now.getDate() - 1);
+            now.setHours(23, 59, 59, 999);
+            break;
+        case 'this_week':
+            startDate.setDate(startDate.getDate() - startDate.getDay());
+            startDate.setHours(0, 0, 0, 0);
+            break;
+        case 'this_month':
+            startDate.setDate(1);
+            startDate.setHours(0, 0, 0, 0);
+            break;
+        default:
+            startDate.setHours(0, 0, 0, 0);
+    }
+    
+    return {
+        startDate: startDate,
+        endDate: period === 'yesterday' ? now : new Date()
+    };
+}
+
+getPreviousPeriodDates(period) {
+    const now = new Date();
+    let startDate = new Date();
+    let endDate = new Date();
+    
+    switch (period) {
+        case 'today':
+            // Вчерашний день
+            startDate.setDate(startDate.getDate() - 1);
+            startDate.setHours(0, 0, 0, 0);
+            endDate.setDate(endDate.getDate() - 1);
+            endDate.setHours(23, 59, 59, 999);
+            break;
+        case 'yesterday':
+            // Позавчера
+            startDate.setDate(startDate.getDate() - 2);
+            startDate.setHours(0, 0, 0, 0);
+            endDate.setDate(endDate.getDate() - 2);
+            endDate.setHours(23, 59, 59, 999);
+            break;
+        case 'this_week':
+            // Предыдущая неделя
+            startDate.setDate(startDate.getDate() - 7 - startDate.getDay());
+            startDate.setHours(0, 0, 0, 0);
+            endDate.setDate(endDate.getDate() - 7);
+            endDate.setHours(23, 59, 59, 999);
+            break;
+        case 'this_month':
+            // Предыдущий месяц
+            startDate.setMonth(startDate.getMonth() - 1, 1);
+            startDate.setHours(0, 0, 0, 0);
+            endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0);
+            endDate.setHours(23, 59, 59, 999);
+            break;
+        default:
+            // По умолчанию - предыдущий день
+            startDate.setDate(startDate.getDate() - 1);
+            startDate.setHours(0, 0, 0, 0);
+            endDate.setDate(endDate.getDate() - 1);
+            endDate.setHours(23, 59, 59, 999);
+    }
+    
+    return {
+        startDate: startDate,
+        endDate: endDate
+    };
+}
 
     // Метрики в реальном времени (последний час)
     async getRealtimeMetrics(advertiserId = null) {

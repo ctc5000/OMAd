@@ -1,4 +1,3 @@
-<!-- templates/dashboard.template.html -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -316,6 +315,29 @@
   .date-range-btn.active {
     background: rgba(255, 255, 255, 0.4);
   }
+
+  /* Новые стили для дополнительных метрик */
+  .metric-details {
+    margin-top: 10px;
+  }
+  
+  .metric-details p {
+    margin: 5px 0;
+    font-size: 0.9rem;
+    opacity: 0.9;
+  }
+  
+  .budget-card {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+  }
+  
+  .targets-card {
+    background: linear-gradient(135deg, rgba(46, 204, 113, 0.2) 0%, rgba(39, 174, 96, 0.2) 100%);
+  }
+  
+  .changes-card {
+    background: linear-gradient(135deg, rgba(241, 196, 15, 0.2) 0%, rgba(243, 156, 18, 0.2) 100%);
+  }
   
   @media (max-width: 768px) {
     .charts-grid {
@@ -465,12 +487,9 @@
   let refreshInterval;
   let selectedCampaignId = null;
   let selectedPeriod = 'today';
-  // let userData = {};
 
   // Проверка авторизации
-   // Функция для проверки авторизации
-   async function checkAuth() {
-    // First, check for injected token from server
+  async function checkAuth() {
     const serverToken = window.authToken || localStorage.getItem('authToken');
     
     if (!serverToken) {
@@ -499,12 +518,9 @@
           role: data.user.role
         });
 
-        // Store token for future use
         localStorage.setItem('authToken', token);
-        
         return data.user;
       } else {
-        // Более подробная обработка ошибок
         const errorDetails = data.details || {};
         console.error('❌ Ошибка валидации токена', {
           status: response.status,
@@ -512,7 +528,6 @@
           details: errorDetails
         });
 
-        // Специфические сообщения об ошибках
         let errorMessage = 'Ошибка авторизации';
         switch (data.error) {
           case 'Token has expired':
@@ -541,8 +556,7 @@
     }
   }
 
-   // Показать ошибку авторизации
-   function showAuthError(message) {
+  function showAuthError(message) {
     document.getElementById('authWarningText').textContent = message;
     document.getElementById('authWarning').style.display = 'block';
     document.getElementById('dashboard-content').style.display = 'none';
@@ -550,40 +564,10 @@
     document.getElementById('loading').style.display = 'none';
   }
 
-  // Скрыть ошибку авторизации
   function hideAuthError() {
     document.getElementById('authWarning').style.display = 'none';
   }
 
-  // Загрузка данных пользователя
-  // async function loadUserData() {
-  //   if (!checkAuth()) return;
-    
-  //   const token = localStorage.getItem('authToken');
-  //   try {
-  //     const response = await fetch('/api/auth/validate', {
-  //       headers: {
-  //         'Authorization': 'Bearer ' + token
-  //       }
-  //     });
-      
-  //     if (response.status === 401) {
-  //       logout();
-  //       return;
-  //     }
-      
-  //     const data = await response.json();
-  //     if (data.success) {
-  //       userData = data.user;
-  //       document.getElementById('userEmail').textContent = userData.email || 'Пользователь';
-  //       document.getElementById('userRole').textContent = userData.role === 'ADMIN' ? 'Администратор' : 'Рекламодатель';
-  //     }
-  //   } catch (error) {
-  //     console.error('Error loading user data:', error);
-  //   }
-  // }
-
-  // Загрузка данных пользователя
   async function loadUserData(user) {
     if (!user) return;
     
@@ -591,8 +575,6 @@
     document.getElementById('userRole').textContent = user.role === 'ADMIN' ? 'Администратор' : 'Рекламодатель';
   }
 
-  // Загрузка данных дашборда
-  // Загрузка данных дашборда
   async function loadDashboardData(period = 'today') {
     const token = localStorage.getItem('authToken');
     
@@ -665,7 +647,6 @@
     }
   }
 
-  // Выход из системы
   function logout() {
     localStorage.removeItem('authToken');
     localStorage.removeItem('userRole');
@@ -674,63 +655,151 @@
     window.location.href = '/login';
   }
 
-  // Рендеринг дашборда (остается без изменений)
+  // ОБНОВЛЕННАЯ ФУНКЦИЯ РЕНДЕРИНГА ДАШБОРДА
   function renderDashboard(data) {
     const container = document.getElementById('dashboard-content');
+    const overview = data.overview;
     
     // Основные метрики
-    const overview = data.overview;
     const metricsHtml = 
       '<div class="metrics-grid">' +
         '<div class="metric-card">' +
           '<div class="metric-label"><i class="fas fa-users"></i> Уникальные посетители (UV)</div>' +
           '<div class="metric-value">' +
-            overview.uv.toLocaleString('ru-RU') +
-            '<span class="metric-change ' + (overview.change.uv_change >= 0 ? 'positive' : 'negative') + '">' +
-              (overview.change.uv_change >= 0 ? '+' : '') + overview.change.uv_change + '%' +
+            (overview.uv || 0).toLocaleString('ru-RU') +
+            '<span class="metric-change ' + ((overview.change?.uv_change || 0) >= 0 ? 'positive' : 'negative') + '">' +
+              ((overview.change?.uv_change || 0) >= 0 ? '+' : '') + (overview.change?.uv_change || 0).toFixed(1) + '%' +
             '</span>' +
           '</div>' +
-          '<div class="metric-label">Охват: ' + overview.reach.toLocaleString('ru-RU') + '</div>' +
+          '<div class="metric-label">Охват: ' + (overview.reach || 0).toLocaleString('ru-RU') + '</div>' +
         '</div>' +
         
         '<div class="metric-card">' +
           '<div class="metric-label"><i class="fas fa-eye"></i> Показы</div>' +
           '<div class="metric-value">' +
-            overview.impressions.toLocaleString('ru-RU') +
-            '<span class="metric-change ' + (overview.change.impressions_change >= 0 ? 'positive' : 'negative') + '">' +
-              (overview.change.impressions_change >= 0 ? '+' : '') + overview.change.impressions_change + '%' +
+            (overview.impressions || 0).toLocaleString('ru-RU') +
+            '<span class="metric-change ' + ((overview.change?.impressions_change || 0) >= 0 ? 'positive' : 'negative') + '">' +
+              ((overview.change?.impressions_change || 0) >= 0 ? '+' : '') + (overview.change?.impressions_change || 0).toFixed(1) + '%' +
             '</span>' +
           '</div>' +
-          '<div class="metric-label">Клики: ' + overview.clicks.toLocaleString('ru-RU') + '</div>' +
+          '<div class="metric-label">Клики: ' + (overview.clicks || 0).toLocaleString('ru-RU') + '</div>' +
         '</div>' +
         
         '<div class="metric-card">' +
           '<div class="metric-label"><i class="fas fa-mouse-pointer"></i> CTR</div>' +
           '<div class="metric-value">' +
-            overview.ctr + '%' +
-            '<span class="metric-change ' + (overview.change.ctr_change >= 0 ? 'positive' : 'negative') + '">' +
-              (overview.change.ctr_change >= 0 ? '+' : '') + overview.change.ctr_change + '%' +
+            (overview.ctr || 0).toFixed(2) + '%' +
+            '<span class="metric-change ' + ((overview.change?.ctr_change || 0) >= 0 ? 'positive' : 'negative') + '">' +
+              ((overview.change?.ctr_change || 0) >= 0 ? '+' : '') + (overview.change?.ctr_change || 0).toFixed(1) + '%' +
             '</span>' +
           '</div>' +
-          '<div class="metric-label">Конверсии: ' + overview.conversions.toLocaleString('ru-RU') + '</div>' +
+          '<div class="metric-label">Конверсии: ' + (overview.conversions || 0).toLocaleString('ru-RU') + '</div>' +
         '</div>' +
         
         '<div class="metric-card">' +
           '<div class="metric-label"><i class="fas fa-chart-pie"></i> CR</div>' +
           '<div class="metric-value">' +
-            overview.cr + '%' +
-            '<span class="metric-change ' + (overview.change.cr_change >= 0 ? 'positive' : 'negative') + '">' +
-              (overview.change.cr_change >= 0 ? '+' : '') + overview.change.cr_change + '%' +
+            (overview.cr || 0).toFixed(2) + '%' +
+            '<span class="metric-change ' + ((overview.change?.cr_change || 0) >= 0 ? 'positive' : 'negative') + '">' +
+              ((overview.change?.cr_change || 0) >= 0 ? '+' : '') + (overview.change?.cr_change || 0).toFixed(1) + '%' +
             '</span>' +
           '</div>' +
           '<div class="metric-label">' +
-            'CPUV: ' + (overview.cpuv !== null ? overview.cpuv.toFixed(2) + ' ₽' : '—') + ' | ' +
-            'CPC: ' + (overview.cpc !== null ? overview.cpc.toFixed(2) + ' ₽' : '—') + ' | ' +
-            'CPL: ' + (overview.cpl !== null ? overview.cpl.toFixed(2) + ' ₽' : '—') +
+            'CPUV: ' + (overview.cpuv !== null && overview.cpuv !== undefined ? overview.cpuv.toFixed(2) + ' ₽' : '—') + ' | ' +
+            'CPC: ' + (overview.cpc !== null && overview.cpc !== undefined ? overview.cpc.toFixed(2) + ' ₽' : '—') + ' | ' +
+            'CPL: ' + (overview.cpl !== null && overview.cpl !== undefined ? overview.cpl.toFixed(2) + ' ₽' : '—') +
           '</div>' +
         '</div>' +
       '</div>';
+
+    // Дополнительные метрики: бюджет, цели, изменения
+    let additionalMetricsHtml = '';
     
+    if (overview.budget_status || overview.targets || overview.change) {
+      additionalMetricsHtml = '<div class="metrics-grid">';
+      
+      // Бюджет
+      if (overview.budget_status) {
+    const budget = overview.budget_status;
+    const hasDetails = budget.spent !== undefined && budget.spent !== null;
+    
+    additionalMetricsHtml +=
+        '<div class="metric-card budget-card">' +
+            '<div class="metric-label"><i class="fas fa-wallet"></i> Статус бюджета</div>' +
+            '<div class="metric-details">' +
+                '<p>Общий бюджет: ' + (budget.total || 0).toFixed(2) + ' ₽</p>' +
+                (hasDetails ? 
+                    '<p>Потрачено: ' + (budget.spent || 0).toFixed(2) + ' ₽</p>' +
+                    '<p>Осталось: ' + (budget.remaining || 0).toFixed(2) + ' ₽</p>' +
+                    '<p>Использование: ' + (budget.utilization || 0).toFixed(2) + '%</p>' +
+                    '<p>Статус: ' + (budget.status || 'Н/Д') + '</p>' +
+                    (budget.campaign_count ? 
+                        '<p>Кампаний: ' + budget.campaign_count + 
+                        ' (активных: ' + (budget.active_campaigns || 0) + ')</p>' : '')
+                    : 
+                    '<p>Используйте фильтр по кампании для детальной информации</p>') +
+            '</div>' +
+        '</div>';
+} else {
+    additionalMetricsHtml +=
+        '<div class="metric-card budget-card">' +
+            '<div class="metric-label"><i class="fas fa-wallet"></i> Статус бюджета</div>' +
+            '<div class="metric-details"><p>Нет данных о бюджете</p></div>' +
+        '</div>';
+}
+
+if (overview.targets) {
+    const targets = overview.targets;
+    const hasTargets = targets.cpu_v_target || targets.cpc_target || targets.cpl_target;
+    
+    if (hasTargets) {
+        additionalMetricsHtml +=
+            '<div class="metric-card targets-card">' +
+                '<div class="metric-label"><i class="fas fa-bullseye"></i> Целевые показатели</div>' +
+                '<div class="metric-details">' +
+                    (targets.cpu_v_target ? 
+                        '<p>Средний целевой CPUV: ' + targets.cpu_v_target.toFixed(2) + ' ₽</p>' : '') +
+                    (targets.cpc_target ? 
+                        '<p>Средний целевой CPC: ' + targets.cpc_target.toFixed(2) + ' ₽</p>' : '') +
+                    (targets.cpl_target ? 
+                        '<p>Средний целевой CPL: ' + targets.cpl_target.toFixed(2) + ' ₽</p>' : '') +
+                    (targets.campaigns_with_targets ? 
+                        '<p>Кампаний с целями: ' + targets.campaigns_with_targets + '</p>' : '') +
+                '</div>' +
+            '</div>';
+    } else {
+        additionalMetricsHtml +=
+            '<div class="metric-card targets-card">' +
+                '<div class="metric-label"><i class="fas fa-bullseye"></i> Целевые показатели</div>' +
+                '<div class="metric-details"><p>Целевые показатели не установлены</p></div>' +
+            '</div>';
+    }
+} else {
+    additionalMetricsHtml +=
+        '<div class="metric-card targets-card">' +
+            '<div class="metric-label"><i class="fas fa-bullseye"></i> Целевые показатели</div>' +
+            '<div class="metric-details"><p>Целевые показатели не установлены</p></div>' +
+        '</div>';
+}
+      
+      // Изменения
+      if (overview.change) {
+        const change = overview.change;
+        additionalMetricsHtml +=
+          '<div class="metric-card changes-card">' +
+            '<div class="metric-label"><i class="fas fa-chart-line"></i> Изменения за период</div>' +
+            '<div class="metric-details">' +
+              '<p>UV: ' + (change.uv_change || 0).toFixed(2) + '%</p>' +
+              '<p>Показы: ' + (change.impressions_change || 0).toFixed(2) + '%</p>' +
+              '<p>Клики: ' + (change.clicks_change || 0).toFixed(2) + '%</p>' +
+              '<p>Конверсии: ' + (change.conversions_change || 0).toFixed(2) + '%</p>' +
+            '</div>' +
+          '</div>';
+      }
+      
+      additionalMetricsHtml += '</div>';
+    }
+
     // Топ кампаний
     let campaignsHtml = '';
     if (data.campaigns && data.campaigns.length > 0) {
@@ -781,63 +850,71 @@
     }
     
     // Воронка конверсий
-    const funnel = data.funnel;
-    const funnelHtml = 
-      '<div class="charts-grid">' +
-        '<div class="chart-card">' +
-          '<h2 class="chart-title"><i class="fas fa-filter"></i> Воронка конверсий</h2>' +
-          '<div class="chart-container">' +
-            '<div style="display: flex; flex-direction: column; gap: 20px; height: 100%;">' +
-              ['Сессии', 'Показы', 'Клики', 'Конверсии'].map(function(stage, index) {
-                const values = [funnel.sessions, funnel.impressions, funnel.clicks, funnel.conversions];
-                const percentages = [100, funnel.rates.impression_rate, funnel.rates.click_through_rate, funnel.rates.conversion_rate];
-                const dropoffs = [0, funnel.dropoffs.sessions_to_impressions, funnel.dropoffs.impressions_to_clicks, funnel.dropoffs.clicks_to_conversions];
-                
-                return (
-                  '<div style="display: flex; align-items: center; gap: 15px;">' +
-                    '<div style="flex: 0 0 100px; font-weight: 600;">' + stage + '</div>' +
-                    '<div style="flex: 1; background: rgba(255,255,255,0.1); height: 40px; border-radius: 8px; overflow: hidden; position: relative;">' +
-                      '<div style="width: ' + percentages[index] + '%; height: 100%; background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);"></div>' +
-                      '<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-weight: 600;">' +
-                        values[index].toLocaleString('ru-RU') + ' (' + percentages[index].toFixed(1) + '%)' +
+    let funnelHtml = '';
+    if (data.funnel) {
+      const funnel = data.funnel;
+      funnelHtml = 
+        '<div class="charts-grid">' +
+          '<div class="chart-card">' +
+            '<h2 class="chart-title"><i class="fas fa-filter"></i> Воронка конверсий</h2>' +
+            '<div class="chart-container">' +
+              '<div style="display: flex; flex-direction: column; gap: 20px; height: 100%;">' +
+                ['Сессии', 'Показы', 'Клики', 'Конверсии'].map(function(stage, index) {
+                  const values = [funnel.sessions, funnel.impressions, funnel.clicks, funnel.conversions];
+                  const percentages = [100, funnel.rates.impression_rate, funnel.rates.click_through_rate, funnel.rates.conversion_rate];
+                  const dropoffs = [0, funnel.dropoffs.sessions_to_impressions, funnel.dropoffs.impressions_to_clicks, funnel.dropoffs.clicks_to_conversions];
+                  
+                  return (
+                    '<div style="display: flex; align-items: center; gap: 15px;">' +
+                      '<div style="flex: 0 0 100px; font-weight: 600;">' + stage + '</div>' +
+                      '<div style="flex: 1; background: rgba(255,255,255,0.1); height: 40px; border-radius: 8px; overflow: hidden; position: relative;">' +
+                        '<div style="width: ' + percentages[index] + '%; height: 100%; background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);"></div>' +
+                        '<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-weight: 600;">' +
+                          values[index].toLocaleString('ru-RU') + ' (' + percentages[index].toFixed(1) + '%)' +
+                        '</div>' +
                       '</div>' +
+                      (dropoffs[index] > 0 ? 
+                        '<div style="flex: 0 0 80px; text-align: right; font-size: 0.9rem; opacity: 0.7;">' +
+                          '- ' + dropoffs[index] +
+                        '</div>' 
+                      : '') +
+                    '</div>'
+                  );
+                }).join('') +
+              '</div>' +
+            '</div>' +
+          '</div>';
+      
+      // Активность по часам
+      if (data.hourly && data.hourly.length > 0) {
+        funnelHtml +=
+          '<div class="chart-card">' +
+            '<h2 class="chart-title"><i class="fas fa-chart-bar"></i> Активность по часам</h2>' +
+            '<div class="chart-container">' +
+              '<div style="display: flex; height: 100%; align-items: flex-end; gap: 4px;">' +
+                data.hourly.slice(-12).map(hour => 
+                  '<div style="flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%;">' +
+                    '<div style="flex: 1; display: flex; align-items: flex-end; width: 100%;">' +
+                      '<div style="width: 100%; background: linear-gradient(0deg, #4facfe 0%, #00f2fe 100%); border-radius: 4px 4px 0 0; height: ' + (hour.impressions / 300 * 100) + '%;"></div>' +
                     '</div>' +
-                    (dropoffs[index] > 0 ? 
-                      '<div style="flex: 0 0 80px; text-align: right; font-size: 0.9rem; opacity: 0.7;">' +
-                        '- ' + dropoffs[index] +
-                      '</div>' 
-                    : '') +
+                    '<div style="padding-top: 8px; font-size: 0.8rem; opacity: 0.8;">' + hour.label + '</div>' +
+                    '<div style="font-size: 0.7rem; opacity: 0.6; margin-top: 2px;">' + hour.impressions + '</div>' +
                   '</div>'
-                );
-              }).join('') +
+                ).join('') +
+              '</div>' +
             '</div>' +
-          '</div>' +
-        '</div>' +
-        
-        '<div class="chart-card">' +
-          '<h2 class="chart-title"><i class="fas fa-chart-bar"></i> Активность по часам</h2>' +
-          '<div class="chart-container">' +
-            '<div style="display: flex; height: 100%; align-items: flex-end; gap: 4px;">' +
-              data.hourly.slice(-12).map(hour => 
-                '<div style="flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%;">' +
-                  '<div style="flex: 1; display: flex; align-items: flex-end; width: 100%;">' +
-                    '<div style="width: 100%; background: linear-gradient(0deg, #4facfe 0%, #00f2fe 100%); border-radius: 4px 4px 0 0; height: ' + (hour.impressions / 300 * 100) + '%;"></div>' +
-                  '</div>' +
-                  '<div style="padding-top: 8px; font-size: 0.8rem; opacity: 0.8;">' + hour.label + '</div>' +
-                  '<div style="font-size: 0.7rem; opacity: 0.6; margin-top: 2px;">' + hour.impressions + '</div>' +
-                '</div>'
-              ).join('') +
-            '</div>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
+          '</div>';
+      }
+      
+      funnelHtml += '</div>';
+    }
     
     // Сводка
     const summaryHtml = 
       '<div style="background: rgba(255, 255, 255, 0.1); padding: 15px; border-radius: 10px; margin: 20px 0; font-size: 0.9rem;">' +
         '<div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">' +
-          '<div><i class="fas fa-calendar"></i> Период: ' + (data.summary.period === 'today' ? 'Сегодня' : data.summary.period) + '</div>' +
-          '<div><i class="fas fa-rocket"></i> Активных кампаний: ' + data.summary.active_campaigns + ' из ' + data.summary.total_campaigns + '</div>' +
+          '<div><i class="fas fa-calendar"></i> Период: ' + (data.summary?.period === 'today' ? 'Сегодня' : data.summary?.period || 'Неизвестно') + '</div>' +
+          '<div><i class="fas fa-rocket"></i> Активных кампаний: ' + (data.summary?.active_campaigns || 0) + ' из ' + (data.summary?.total_campaigns || 0) + '</div>' +
           (data.realtime ? 
             '<div><i class="fas fa-clock"></i> Пиковый час: ' + data.realtime.peak_hour.hour + ':00 (' + data.realtime.peak_hour.impressions + ' показов)</div>' +
             '<div><i class="fas fa-users"></i> Активных сессий: ' + data.realtime.active_sessions + '</div>' 
@@ -845,17 +922,16 @@
         '</div>' +
       '</div>';
     
-    container.innerHTML = metricsHtml + summaryHtml + funnelHtml + campaignsHtml;
+    // Собираем все вместе
+    container.innerHTML = metricsHtml + additionalMetricsHtml + summaryHtml + funnelHtml + campaignsHtml;
   }
 
-  // Обновление времени последнего обновления
   function updateLastUpdateTime() {
     const now = new Date();
     const timeString = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     document.getElementById('last-update').textContent = timeString;
   }
 
-  // Функция для выбора кампании
   function selectCampaign(campaignId) {
     selectedCampaignId = campaignId;
     document.querySelectorAll('tr[data-campaign-id]').forEach(row => {
@@ -869,7 +945,6 @@
     console.log('✅ Выбрана кампания: ' + campaignId);
   }
 
-  // Генерация отчета
   async function generateReport(format) {
     if (!checkAuth()) return;
     
@@ -944,7 +1019,6 @@
     const user = await checkAuth();
     
     if (!user) {
-      // Если нет авторизации, показываем ошибку
       showAuthError('Требуется авторизация. Пожалуйста, войдите в систему.');
       return;
     }
