@@ -11,7 +11,8 @@
     "migrate:up": "node scripts/run-migrations.js",
     "migrate:down": "node scripts/rollback-migrations.js",
     "migrate:fix": "node scripts/fix-conversions-migration.js",
-    "db:status": "node scripts/check-db-status.js"
+    "db:status": "node scripts/check-db-status.js",
+    "test": "jest test/analytics-session.test.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
@@ -32,11 +33,17 @@
     "puppeteer": "^24.33.0",
     "sequelize": "^6.37.7",
     "umzug": "^3.8.2",
+    "uuid": "^13.0.0",
+    "validator": "^13.15.26",
     "winston": "^3.18.3"
   },
   "devDependencies": {
+    "@babel/preset-env": "^7.28.5",
+    "jest": "^30.2.0",
     "nodemon": "^3.0.1",
-    "sequelize-cli": "^6.6.0"
+    "sequelize-cli": "^6.6.0",
+    "sqlite3": "^5.1.7",
+    "supertest": "^7.1.4"
   },
   "engines": {
     "node": ">=16.0.0"

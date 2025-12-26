@@ -92,12 +92,18 @@ async function loadModules() {
                 }
 
                 // Загрузка контроллера
-                const controllerPath = path.join(modulePath, 'Controllers', `${moduleName}Controller.js`);
-                console.log(`   🔍 Поиск контроллера: ${controllerPath}`);
-                
-                if (fs.existsSync(controllerPath)) {
-                    console.log(`   ✅ Контроллер найден`);
-                    const ControllerClass = require(controllerPath);
+                const controllersPath = path.join(modulePath, 'Controllers');
+                const controllerFiles = fs.readdirSync(controllersPath)
+                    .filter(file => file.includes('Controller.js'));
+
+                let controllerPath;
+                let ControllerClass;
+
+                if (controllerFiles.length > 0) {
+                    controllerPath = path.join(controllersPath, controllerFiles[0]);
+                    console.log(`   🔍 Найден контроллер: ${controllerPath}`);
+
+                    ControllerClass = require(controllerPath);
                     const controllerInstance = new ControllerClass(global.sequelizeModels, sequelize);
                     console.log(`   ✅ Контроллер инициализирован`);
 
