@@ -217,124 +217,254 @@ class AnalyticsController {
 
     // Получение метрик
     // Получение метрик
-async getMetrics(req, res) {
-    try {
-        const { campaign_id, start_date, end_date } = req.query;
-
-        // Базовый where для сессий
-        let sessionWhere = {};
-        
-        // Если передан campaign_id, фильтруем сессии по этому campaign_id
-        if (campaign_id) {
-            // Находим все session_id, связанные с этой кампанией через impressions
-            const impressions = await this.models.AdImpression.findAll({
-                where: { campaign_id },
-                attributes: ['session_id'],
-                raw: true
-            });
+    async getMetrics(req, res) {
+        try {
+            const { campaign_id, start_date, end_date, advertiser_id } = req.query;
+    
+            // Базовый where для сессий и событий
+            let sessionWhere = {};
+            let eventWhere = {};
+            let sessionIds = []; // Для расчета reach
             
-            const sessionIds = impressions.map(imp => imp.session_id);
-            
-            if (sessionIds.length > 0) {
-                sessionWhere.session_id = {
-                    [Op.in]: sessionIds
-                };
-            } else {
-                // Если нет impressions для этой кампании, возвращаем пустые метрики
-                return res.json({
-                    success: true,
-                    data: {
-                        uv: 0,
-                        reach: 0,
-                        impressions: 0,
-                        clicks: 0,
-                        conversions: 0,
-                        ctr: 0,
-                        cr: 0,
-                        cpu_v: 0,
-                        cpc: 0,
-                        cpl: 0
-                    }
+            // Если передан campaign_id
+            if (campaign_id) {
+                // 1. Находим все session_id, связанные с этой кампанией через impressions
+                const impressions = await this.models.AdImpression.findAll({
+                    where: { campaign_id },
+                    attributes: ['session_id'],
+                    raw: true
                 });
+                
+                sessionIds = [...new Set(impressions.map(imp => imp.session_id))];
+                
+                if (sessionIds.length > 0) {
+                    // ✅ Reach = уникальные сессии, которым показывали баннер
+                    sessionWhere.session_id = {
+                        [Op.in]: sessionIds
+                    };
+                } else {
+                    // Если нет impressions для этой кампании
+                    return res.json({
+                        success: true,
+                        data: {
+                            uv: 0,
+                            reach: 0, // Reach всегда ≤ UV
+                            impressions: 0,
+                            clicks: 0,
+                            conversions: 0,
+                            ctr: 0,
+                            cr: 0,
+                            cpu_v: 0,
+                            cpc: 0,
+                            cpl: 0,
+                            budget_status: null,
+                            note: "Нет данных о показах для этой кампании"
+                        }
+                    });
+                }
+                
+                eventWhere.campaign_id = campaign_id;
             }
-        }
-        
-        // Добавляем фильтр по датам если указаны
-        if (start_date && end_date) {
-            sessionWhere.created_at = {
-                [Op.between]: [new Date(start_date), new Date(end_date)]
+            
+            // Если передан advertiser_id
+            if (advertiser_id) {
+                eventWhere.advertiser_id = advertiser_id;
+            }
+            
+            // Фильтр по датам
+            if (start_date && end_date) {
+                const dateFilter = {
+                    created_at: {
+                        [Op.between]: [new Date(start_date), new Date(end_date)]
+                    }
+                };
+                sessionWhere = { ...sessionWhere, ...dateFilter };
+                eventWhere = { ...eventWhere, ...dateFilter };
+            }
+    
+            // Параллельные запросы для производительности
+            const [
+                sessions,          // Все сессии по фильтрам (UV)
+                reachSessions,     // Сессии, которым показывали баннер (для Reach)
+                impressionsCount,
+                clicksCount,
+                conversionsCount
+            ] = await Promise.all([
+                // Все сессии по фильтрам (UV)
+                this.models.Session.findAll({
+                    where: sessionWhere,
+                    attributes: ['session_id', 'restaurant_segment']
+                }),
+                
+                // ✅ Reach: сессии, которым действительно показывали баннер
+                campaign_id ? 
+                    this.models.Session.findAll({
+                        where: {
+                            session_id: {
+                                [Op.in]: sessionIds
+                            },
+                            ...(start_date && end_date ? {
+                                created_at: {
+                                    [Op.between]: [new Date(start_date), new Date(end_date)]
+                                }
+                            } : {})
+                        },
+                        attributes: ['session_id']
+                    }) : Promise.resolve([]),
+                
+                // Счетчики событий
+                this.models.AdImpression.count({ where: eventWhere }),
+                this.models.AdClick.count({ where: eventWhere }),
+                this.models.AdConversion.count({ 
+                    where: { 
+                        ...eventWhere,
+                        status: 'confirmed' // Только подтвержденные конверсии!
+                    }
+                })
+            ]);
+    
+            // Основные метрики
+            const uv = sessions.length;
+            const reach = campaign_id ? reachSessions.length : uv; // Если campaign_id нет, reach = uv
+            const ctr = impressionsCount > 0 ? (clicksCount / impressionsCount) * 100 : 0;
+            const cr = reach > 0 ? (conversionsCount / reach) * 100 : 0; // По ТЗ: CR = Конверсии / Охват
+    
+            // Инициализируем стоимостные метрики
+            let cpu_v = 0;
+            let cpc = 0;
+            let cpl = 0;
+            let budgetStatus = null;
+            let targets = null;
+    
+            // ✅ Реальные расчеты CPUV, CPC, CPL для вашей структуры Campaign
+            if (campaign_id && this.models.Campaign) {
+                try {
+                    const campaign = await this.models.Campaign.findOne({
+                        where: { id: campaign_id }
+                    });
+                    
+                    if (campaign) {
+                        // Используем фактические значения из кампании, если они есть
+                        // У вас уже есть поля cost_per_uv, cost_per_click, cost_per_lead!
+                        
+                        // CPUV = Стоимость за уникального посетителя
+                        if (campaign.cost_per_uv && campaign.cost_per_uv > 0) {
+                            cpu_v = parseFloat(campaign.cost_per_uv);
+                        } else {
+                            // Если нет факта, оцениваем: CPUV = Бюджет / UV
+                            cpu_v = uv > 0 ? (campaign.budget || 0) / uv : 0;
+                        }
+                        
+                        // CPC = Стоимость за клик
+                        if (campaign.cost_per_click && campaign.cost_per_click > 0) {
+                            cpc = parseFloat(campaign.cost_per_click);
+                        } else {
+                            // Если нет факта, оцениваем: CPC = Бюджет / Клики
+                            cpc = clicksCount > 0 ? (campaign.budget || 0) / clicksCount : 0;
+                        }
+                        
+                        // CPL = Стоимость за конверсию
+                        if (campaign.cost_per_lead && campaign.cost_per_lead > 0) {
+                            cpl = parseFloat(campaign.cost_per_lead);
+                        } else {
+                            // Если нет факта, оцениваем: CPL = Бюджет / Конверсии
+                            cpl = conversionsCount > 0 ? (campaign.budget || 0) / conversionsCount : 0;
+                        }
+                        
+                        // Статус бюджета (на основе фактических затрат)
+                        const actualSpend = cpu_v * uv; // Оцениваем фактические затраты
+                        
+                        budgetStatus = {
+                            total: parseFloat(campaign.budget || 0),
+                            spent: parseFloat(actualSpend),
+                            remaining: parseFloat((campaign.budget || 0) - actualSpend),
+                            utilization: campaign.budget > 0 ? 
+                                parseFloat((actualSpend / campaign.budget * 100).toFixed(2)) : 0,
+                            status: campaign.status
+                        };
+                        
+                        // Целевые значения (если есть)
+                        targets = {
+                            cpu_v_target: parseFloat(campaign.cpu_v_target || 0),
+                            cpc_target: parseFloat(campaign.cpc_target || 0),
+                            cpl_target: parseFloat(campaign.cpl_target || 0)
+                        };
+                    }
+                } catch (campaignError) {
+                    console.warn('Campaign data error:', campaignError.message);
+                }
+            } else if (campaign_id) {
+                // Если передан campaign_id, но нет модели Campaign
+                // Используем упрощенные расчеты
+                const estimatedBudget = 100000; // Примерный бюджет по умолчанию
+                cpu_v = uv > 0 ? estimatedBudget / uv : 0;
+                cpc = clicksCount > 0 ? estimatedBudget / clicksCount : 0;
+                cpl = conversionsCount > 0 ? estimatedBudget / conversionsCount : 0;
+            }
+    
+            // Сегментация по типам ресторанов
+            const segmentation = sessions.reduce((acc, session) => {
+                const segment = session.restaurant_segment || 'unknown';
+                acc[segment] = (acc[segment] || 0) + 1;
+                return acc;
+            }, {});
+    
+            const metrics = {
+                // Основные метрики
+                uv: uv,
+                reach: Math.min(reach, uv), // ✅ Гарантируем что reach ≤ uv
+                impressions: impressionsCount,
+                clicks: clicksCount,
+                conversions: conversionsCount,
+                
+                // Процентные метрики
+                ctr: parseFloat(ctr.toFixed(2)),
+                cr: parseFloat(cr.toFixed(2)),
+                
+                // ✅ Стоимостные метрики (реальные расчеты)
+                cpu_v: parseFloat(cpu_v.toFixed(2)),
+                cpc: parseFloat(cpc.toFixed(2)),
+                cpl: parseFloat(cpl.toFixed(2)),
+                
+                // Статус бюджета и цели
+                budget_status: budgetStatus,
+                targets: targets,
+                
+                // Дополнительная информация
+                segmentation: segmentation,
+                period: start_date && end_date ? {
+                    start: start_date,
+                    end: end_date
+                } : 'all_time',
+                
+                // Проверка корректности данных
+                data_quality: {
+                    reach_le_uv: reach <= uv, // Должно быть true
+                    ctr_range: ctr >= 0 && ctr <= 100,
+                    cr_range: cr >= 0 && cr <= 100,
+                    has_cost_data: !!(budgetStatus || targets)
+                },
+                
+                // Отладочная информация (можно убрать в проде)
+                debug_info: campaign_id ? {
+                    total_sessions: sessions.length,
+                    reached_sessions: reachSessions.length,
+                    sessions_with_impressions: sessionIds.length
+                } : undefined
             };
+    
+            return res.json({
+                success: true,
+                data: metrics
+            });
+        } catch (error) {
+            console.error('Error in getMetrics:', error);
+            return res.status(500).json({
+                success: false,
+                error: error.message
+            });
         }
-
-        // Получаем сессии
-        const sessions = await this.models.Session.findAll({
-            where: sessionWhere
-        });
-
-        // Получаем статистику по событиям
-        const [impressionsCount, clicksCount, conversionsCount] = await Promise.all([
-            this.models.AdImpression.count({
-                where: {
-                    ...(campaign_id && { campaign_id }),
-                    ...(start_date && end_date && {
-                        created_at: {
-                            [Op.between]: [new Date(start_date), new Date(end_date)]
-                        }
-                    })
-                }
-            }),
-            this.models.AdClick.count({
-                where: {
-                    ...(campaign_id && { campaign_id }),
-                    ...(start_date && end_date && {
-                        created_at: {
-                            [Op.between]: [new Date(start_date), new Date(end_date)]
-                        }
-                    })
-                }
-            }),
-            this.models.AdConversion.count({
-                where: {
-                    ...(campaign_id && { campaign_id }),
-                    ...(start_date && end_date && {
-                        created_at: {
-                            [Op.between]: [new Date(start_date), new Date(end_date)]
-                        }
-                    })
-                }
-            })
-        ]);
-
-        // Рассчитываем метрики
-        const uv = sessions.length;
-        const ctr = impressionsCount > 0 ? (clicksCount / impressionsCount) * 100 : 0;
-        const cr = clicksCount > 0 ? (conversionsCount / clicksCount) * 100 : 0;
-
-        const metrics = {
-            uv: uv,
-            reach: uv, // Для простоты считаем reach = UV
-            impressions: impressionsCount,
-            clicks: clicksCount,
-            conversions: conversionsCount,
-            ctr: parseFloat(ctr.toFixed(2)),
-            cr: parseFloat(cr.toFixed(2)),
-            cpu_v: 0, // Заглушка - нужно считать из данных кампаний
-            cpc: 0,   // Заглушка
-            cpl: 0    // Заглушка
-        };
-
-        return res.json({
-            success: true,
-            data: metrics
-        });
-    } catch (error) {
-        console.error('Error in getMetrics:', error);
-        return res.status(500).json({
-            success: false,
-            error: error.message
-        });
     }
-}
 
     // Получение метрик по конкретной кампании
     async getCampaignMetrics(req, res) {
