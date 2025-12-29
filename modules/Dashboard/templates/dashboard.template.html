@@ -393,6 +393,37 @@
     gap: 10px;
   }
   }
+
+  /* Стили для селектора компаний */
+#company-selector {
+  background: rgba(255, 255, 255, 0.9) !important;
+  color: #333 !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+}
+
+#company-selector option {
+  background: white !important;
+  color: #333 !important;
+  padding: 10px !important;
+}
+
+#company-selector option:hover {
+  background: #667eea !important;
+  color: white !important;
+}
+
+#company-selector:focus {
+  outline: 2px solid rgba(102, 126, 234, 0.5);
+}
+
+#company-selector-container {
+  animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 </style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -432,6 +463,18 @@
       <button class="period-btn" data-period="yesterday">Вчера</button>
       <button class="period-btn" data-period="this_week">Эта неделя</button>
       <button class="period-btn" data-period="this_month">Этот месяц</button>
+    </div>
+
+    <div id="company-selector-container" style="display: none; margin-top: 15px;">
+      <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+        <label for="company-selector" style="font-size: 0.9rem; opacity: 0.9;">
+          <i class="fas fa-building"></i> Фильтр по компании:
+        </label>
+        <select id="company-selector" class="period-btn" style="background: rgba(255,255,255,0.2); color: white; border: none; padding: 10px; border-radius: 8px; min-width: 200px;">
+          <option value="all">Все компании</option>
+          <!-- Опции будут загружены динамически -->
+        </select>
+      </div>
     </div>
     
     <div style="margin-top: 20px; font-size: 0.9rem; opacity: 0.8;">
@@ -488,73 +531,225 @@
   let selectedCampaignId = null;
   let selectedPeriod = 'today';
 
-  // Проверка авторизации
-  async function checkAuth() {
-    const serverToken = window.authToken || localStorage.getItem('authToken');
+  let selectedCompanyId = 'all';
+  let selectedCompanyType = 'advertiser'; // 'advertiser' или 'campaign'
+  let availableCompanies = [];
+
+  // Загрузка списка доступных компаний/кампаний
+  async function loadAvailableCompanies(user) {
+  try {
+    const token = localStorage.getItem('authToken');
+    let url = '';
     
-    if (!serverToken) {
-      console.log('❌ Токен не найден ни в окружении, ни в localStorage');
-      showAuthError('Требуется авторизация. Пожалуйста, войдите снова.');
-      return null;
+    if (user.role === 'ADMIN') {
+      // Админ видит всех рекламодателей
+      url = '/api/advertisers/list';
+      selectedCompanyType = 'advertiser';
+      console.log('👑 Админ загружает рекламодателей с URL:', url);
+    } else if (user.role === 'ADVERTISER') {
+      // Рекламодатель видит свои кампании
+      url = '/api/campaigns/my';
+      selectedCompanyType = 'campaign';
+      console.log('📊 Рекламодатель загружает кампании с URL:', url);
+    } else {
+      console.warn('⚠️ Неизвестная роль пользователя:', user.role);
+      return [];
     }
     
-    const token = serverToken.startsWith('Bearer ') 
-      ? serverToken.split(' ')[1] 
-      : serverToken;
-    
-    try {
-      const response = await fetch('/api/auth/validate', {
-        method: 'GET',
-        headers: {
-          'Authorization': 'Bearer ' + token
-        }
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok && data.success) {
-        console.log('✅ Токен валиден', {
-          userId: data.user.id,
-          role: data.user.role
-        });
-
-        localStorage.setItem('authToken', token);
-        return data.user;
-      } else {
-        const errorDetails = data.details || {};
-        console.error('❌ Ошибка валидации токена', {
-          status: response.status,
-          error: data.error,
-          details: errorDetails
-        });
-
-        let errorMessage = 'Ошибка авторизации';
-        switch (data.error) {
-          case 'Token has expired':
-            errorMessage = 'Срок действия сессии истек. Пожалуйста, войдите заново.';
-            break;
-          case 'Invalid token signature':
-            errorMessage = 'Обнаружена неправильная подпись токена. Требуется повторный вход.';
-            break;
-          default:
-            errorMessage = data.error || 'Не удалось проверить авторизацию';
-        }
-
-        showAuthError(errorMessage);
-        logout();
-        return null;
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': 'Bearer ' + token
       }
-    } catch (error) {
-      console.error('❌ Критическая ошибка проверки токена:', {
-        message: error.message,
-        name: error.name
-      });
+    });
+    
+    console.log('📡 Ответ от сервера:', {
+      status: response.status,
+      url: url,
+      ok: response.ok
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Ошибка загрузки списка компаний:', errorText);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    
+    const result = await response.json();
+    console.log('📦 Данные от сервера:', result);
+    
+    if (result.success) {
+      availableCompanies = result.data || [];
+      console.log(`✅ Загружено компаний: ${availableCompanies.length}`);
+      return availableCompanies;
+    } else {
+      console.error('❌ Сервер вернул ошибку:', result.error);
+      return [];
+    }
+    
+  } catch (error) {
+    console.error('❌ Ошибка загрузки компаний:', {
+      message: error.message,
+      stack: error.stack
+    });
+    return [];
+  }
+}
+
+// Рендеринг селектора компаний
+// Рендеринг селектора компаний
+function renderCompanySelector(companies, userRole) {
+  const container = document.getElementById('company-selector-container');
+  const selector = document.getElementById('company-selector');
+  
+  if (!container || !selector) return;
+  
+  console.log('📊 Компании для рендеринга:', {
+    userRole,
+    companiesCount: companies.length,
+    companies: companies
+  });
+  
+  // Показываем контейнер
+  container.style.display = 'block';
+  
+  // Очищаем существующие опции (кроме "Все компании")
+  while (selector.options.length > 1) {
+    selector.remove(1);
+  }
+  
+  // Изменяем текст первой опции
+  selector.options[0].textContent = 'Выберите компанию';
+  
+  // Добавляем опции
+  companies.forEach(company => {
+    const option = document.createElement('option');
+    // Конвертируем ID в строку для единообразия
+    option.value = String(company.id);
+    
+    if (userRole === 'ADMIN') {
+      // Для админа: показываем рекламодателей
+      const displayName = company.name || company.email || `Рекламодатель ID: ${company.id}`;
+      option.textContent = displayName;
+      option.setAttribute('title', displayName);
+    } else if (userRole === 'ADVERTISER') {
+      // Для рекламодателя: показываем кампании
+      let displayName = company.name || `Кампания ID: ${company.id}`;
+      if (company.status) {
+        displayName += ` (${company.status === 'active' ? 'активна' : 'на паузе'})`;
+      }
+      option.textContent = displayName;
+      option.setAttribute('title', displayName);
+    }
+    
+    selector.appendChild(option);
+  });
+  
+  // Устанавливаем цвет текста для видимости
+  selector.style.color = '#333';
+  selector.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+  
+  // Сбрасываем выбор на первый элемент
+  selector.selectedIndex = 0;
+  
+  console.log(`✅ Селектор ${userRole} отрендерен. Опций: ${selector.options.length}`);
+  
+  // Добавляем обработчик изменения
+  selector.addEventListener('change', function() {
+    selectedCompanyId = this.value;
+    console.log(`✅ Выбрана ${selectedCompanyType}: ${selectedCompanyId}`);
+    
+    // Обновляем дашборд с выбранной компанией
+    loadDashboardData(currentPeriod, selectedCompanyId, selectedCompanyType);
+  });
+}
+
+  // Проверка авторизации
+  async function checkAuth() {
+  console.log('🔐 Начало checkAuth()');
+  
+  const serverToken = window.authToken || localStorage.getItem('authToken');
+  console.log('📦 Токен из localStorage:', serverToken ? 'Есть' : 'Нет');
+  
+  if (!serverToken) {
+    console.log('❌ Токен не найден ни в окружении, ни в localStorage');
+    showAuthError('Требуется авторизация. Пожалуйста, войдите снова.');
+    return null;
+  }
+  
+  const token = serverToken.startsWith('Bearer ') 
+    ? serverToken.split(' ')[1] 
+    : serverToken;
+  
+  console.log('🔐 Токен для проверки:', token ? `Есть (${token.length} символов)` : 'Нет');
+  
+  try {
+    console.log('📡 Отправка запроса на /api/auth/validate...');
+    
+    const response = await fetch('/api/auth/validate', {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + token
+      }
+    });
+    
+    console.log('📡 Ответ от /api/auth/validate:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok
+    });
+    
+    const data = await response.json();
+    console.log('📦 Данные от /api/auth/validate:', data);
+    
+    if (response.ok && data.success) {
+    console.log('✅ Токен валиден, пользователь:', data.user);
+    
+    localStorage.setItem('authToken', token);
+    
+    // ВОЗВРАЩАЕМ правильную структуру
+    const user = {
+      id: data.user.id || data.user.userId || data.user.user_id,
+      role: data.user.role,
+      advertiserId: data.user.advertiserId || data.user.advertiser_id,
+      email: data.user.email || 'Пользователь'
+    };
+    
+    // Сохраняем пользователя в глобальной переменной
+    window.currentUser = user;
+    window.currentUserRole = user.role;
+    
+    console.log('👤 Возвращаем пользователя:', user);
+    return user;
+  } else {
+      console.error('❌ Ошибка валидации токена:', data.error || 'Неизвестная ошибка');
       
-      showAuthError('Произошла системная ошибка. Пожалуйста, попробуйте позже.');
+      let errorMessage = 'Ошибка авторизации';
+      switch (data.error) {
+        case 'Token has expired':
+          errorMessage = 'Срок действия сессии истек. Пожалуйста, войдите заново.';
+          break;
+        case 'Invalid token signature':
+          errorMessage = 'Обнаружена неправильная подпись токена. Требуется повторный вход.';
+          break;
+        default:
+          errorMessage = data.error || 'Не удалось проверить авторизацию';
+      }
+
+      showAuthError(errorMessage);
       logout();
       return null;
     }
+  } catch (error) {
+    console.error('❌ Критическая ошибка проверки токена:', {
+      message: error.message,
+      name: error.name
+    });
+    
+    showAuthError('Произошла системная ошибка. Пожалуйста, попробуйте позже.');
+    logout();
+    return null;
   }
+}
 
   function showAuthError(message) {
     document.getElementById('authWarningText').textContent = message;
@@ -575,31 +770,57 @@
     document.getElementById('userRole').textContent = user.role === 'ADMIN' ? 'Администратор' : 'Рекламодатель';
   }
 
-  async function loadDashboardData(period = 'today') {
-    const token = localStorage.getItem('authToken');
-    
-    if (!token) {
-      console.error('❌ No token found in localStorage');
-      showAuthError('Требуется авторизация. Пожалуйста, войдите снова.');
-      return;
-    }
+  async function loadDashboardData(period = 'today', companyId = 'all', companyType = 'advertiser') {
+  const token = localStorage.getItem('authToken');
+  
+  if (!token) {
+    console.error('❌ No token found in localStorage');
+    showAuthError('Требуется авторизация. Пожалуйста, войдите снова.');
+    return;
+  }
+
+  const user = window.currentUser;
+  
+  if (!user) {
+    console.error('❌ User not loaded');
+    showAuthError('Данные пользователя не загружены.');
+    return;
+  }
     
     try {
       document.getElementById('loading').style.display = 'block';
       document.getElementById('dashboard-content').style.display = 'none';
+       // Строим URL с параметрами
+    let url = `/api/dashboard/data?period=${period}`;
+
+     // Добавляем параметры фильтрации в зависимости от типа компании
+     if (companyId && companyId !== 'all') {
+      if (companyType === 'advertiser' || user.role === 'ADMIN') {
+        // Для админа или выбора рекламодателя
+        url += `&advertiser_id=${companyId}`;
+      } else if (companyType === 'campaign' || user.role === 'ADVERTISER') {
+        // Для рекламодателя или выбора кампании
+        url += `&campaign_id=${companyId}`;
+      }
+    } else if (user.role === 'ADVERTISER' && user.advertiserId) {
+      // Если рекламодатель выбрал "все", показываем только его кампании
+      url += `&advertiser_id=${user.advertiserId}`;
+    }
+
+    
       
       console.log('🔐 Sending dashboard request with token', {
         tokenLength: token.length,
         period: period
       });
       
-      const response = await fetch('/api/dashboard/data?period=' + period, {
-        method: 'GET',
-        headers: {
-          'Authorization': 'Bearer ' + token,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      }
+    });
       
       console.log('📡 Dashboard Response Status:', response.status);
       
@@ -647,6 +868,58 @@
     }
   }
 
+  // Функция для получения текущего пользователя
+async function getCurrentUser() {
+  const token = localStorage.getItem('authToken');
+  if (!token) return null;
+  
+  try {
+    const response = await fetch('/api/auth/me', {
+      headers: {
+        'Authorization': 'Bearer ' + token
+      }
+    });
+    
+    if (response.ok) {
+      return await response.json();
+    }
+  } catch (error) {
+    console.error('❌ Ошибка получения данных пользователя:', error);
+  }
+  
+  return null;
+}
+
+// Функция для обновления заголовка дашборда
+function updateDashboardTitle(companyId, companyType, companies, userRole) {
+  const titleElement = document.querySelector('.header h1');
+  if (!titleElement) return;
+  
+  let companyName = 'Все компании';
+  
+  if (companyId && companyId !== 'all') {
+    // Ищем компанию (конвертируем ID в строку для сравнения)
+    const company = companies.find(c => String(c.id) === String(companyId));
+    if (company) {
+      if (userRole === 'ADMIN') {
+        companyName = `Рекламодатель: ${company.name || company.email || `ID: ${company.id}`}`;
+      } else if (userRole === 'ADVERTISER') {
+        companyName = `Кампания: ${company.name || `ID: ${company.id}`}`;
+      }
+    } else {
+      console.warn(`⚠️ Компания с ID ${companyId} не найдена в списке`, companies);
+    }
+  } else if (userRole === 'ADVERTISER') {
+    companyName = 'Все мои кампании';
+  } else if (userRole === 'ADMIN') {
+    companyName = 'Все рекламодатели';
+  }
+  
+  // Обновляем заголовок
+  const originalText = 'Order Master Analytics Dashboard';
+  titleElement.innerHTML = `<i class="fas fa-chart-line"></i> ${originalText}<br><small style="font-size: 0.6em; opacity: 0.8;">${companyName}</small>`;
+}
+
   function logout() {
     localStorage.removeItem('authToken');
     localStorage.removeItem('userRole');
@@ -659,6 +932,10 @@
   function renderDashboard(data) {
     const container = document.getElementById('dashboard-content');
     const overview = data.overview;
+
+    if (selectedCompanyId !== 'all' && availableCompanies.length > 0) {
+    updateDashboardTitle(selectedCompanyId, selectedCompanyType, availableCompanies, window.currentUserRole);
+  }
     
     // Основные метрики
     const metricsHtml = 
@@ -1014,14 +1291,40 @@ if (overview.targets) {
   // Инициализация
   document.addEventListener('DOMContentLoaded', async function() {
     console.log('🚀 Инициализация дашборда...');
+  
+  // Проверяем авторизацию
+  const user = await checkAuth();
+  
+  if (!user) {
+    showAuthError('Требуется авторизация. Пожалуйста, войдите в систему.');
+    return;
+  }
+
+  console.log('👤 Пользователь авторизован:', user);
+
+  // Загружаем данные пользователя в UI
+  loadUserData(user);
+  
+  // Загружаем список доступных компаний/кампаний
+  console.log('🔄 Загрузка доступных компаний...');
+  const companies = await loadAvailableCompanies(user);
+  
+  console.log('📋 Полученные компании:', {
+    count: companies.length,
+    companies: companies
+  });
+  
+   // Рендерим селектор компаний
+   renderCompanySelector(companies, user.role);
+  
+  // Обновляем заголовок
+  updateDashboardTitle('all', user.role === 'ADMIN' ? 'advertiser' : 'campaign', companies, user.role);
+  
+  // Загружаем данные по умолчанию (все компании)
+  loadDashboardData(currentPeriod, 'all', user.role === 'ADMIN' ? 'advertiser' : 'campaign');
     
-    // Проверяем авторизацию
-    const user = await checkAuth();
-    
-    if (!user) {
-      showAuthError('Требуется авторизация. Пожалуйста, войдите в систему.');
-      return;
-    }
+    // Обновляем заголовок
+    updateDashboardTitle('all', user.role === 'ADMIN' ? 'advertiser' : 'campaign', companies, user.role);
     
     // Загружаем данные пользователя
     loadUserData(user);

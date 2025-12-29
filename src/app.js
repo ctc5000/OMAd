@@ -269,7 +269,7 @@ async function startServer() {
       📈 Order Master Analytics System
       ===========================================
       ✅ Сервер запущен: http://localhost:${PORT}
-      ✅ Дешборд запущен: http://localhost:${PORT}/dashboard
+      ✅ Дешборд запущен: http://localhost:${PORT}/login
       
       📊 API готов к работе
       🔗 Модули: ${Object.keys(modules).join(', ')}
