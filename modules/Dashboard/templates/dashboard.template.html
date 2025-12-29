@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>📊 Order Master Analytics Dashboard</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css">
 <style>
   * {
     margin: 0;
@@ -424,6 +425,231 @@
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Стили для Choices.js селектора */
+.company-select {
+  width: 100%;
+  opacity: 0;
+  position: absolute;
+  height: 0;
+  pointer-events: none;
+}
+
+.choices {
+  width: 100%;
+  margin-bottom: 0;
+  position: relative;
+  z-index: 10000 !important; /* КРИТИЧЕСКИ ВАЖНО: очень высокий z-index */
+}
+
+.choices__inner {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(102, 126, 234, 0.5) !important;
+  border-radius: 8px !important;
+  min-height: 42px !important;
+  font-size: 14px !important;
+  color: #333 !important;
+  padding: 8px 12px !important;
+  transition: all 0.3s ease !important;
+  backdrop-filter: blur(10px);
+  position: relative;
+  z-index: 10001 !important;
+}
+
+.choices__inner:hover {
+  background: rgba(255, 255, 255, 1) !important;
+  border-color: rgba(102, 126, 234, 0.8) !important;
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.15) !important;
+}
+
+.choices__inner:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2) !important;
+}
+
+.choices__list--single {
+  padding: 0 !important;
+}
+
+/* САМОЕ ВАЖНОЕ ИСПРАВЛЕНИЕ - dropdown должен быть fixed и с максимальным z-index */
+.choices__list--dropdown,
+.choices__list[aria-expanded] {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border: 1px solid rgba(102, 126, 234, 0.5) !important;
+  border-radius: 8px !important;
+  margin-top: 8px !important;
+  backdrop-filter: blur(10px) !important;
+  z-index: 2147483647 !important; /* Максимально возможный z-index */
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3) !important;
+  position: fixed !important; /* fixed вместо absolute */
+  max-height: 300px !important;
+  overflow-y: auto !important;
+  transform: none !important; /* Убираем любые трансформации */
+}
+
+/* Функция для правильного позиционирования dropdown */
+.choices__list--dropdown {
+  left: var(--dropdown-left, auto) !important;
+  top: var(--dropdown-top, auto) !important;
+  width: var(--dropdown-width, auto) !important;
+}
+
+.choices__list--dropdown .choices__item--selectable,
+.choices__list[aria-expanded] .choices__item--selectable {
+  padding: 12px 15px !important;
+  color: #333 !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+  font-size: 14px !important;
+  transition: all 0.2s ease !important;
+}
+
+.choices__list--dropdown .choices__item--selectable:last-child,
+.choices__list[aria-expanded] .choices__item--selectable:last-child {
+  border-bottom: none !important;
+}
+
+.choices__list--dropdown .choices__item--selectable:hover,
+.choices__list[aria-expanded] .choices__item--selectable:hover {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%) !important;
+  color: #667eea !important;
+  transform: translateX(3px);
+}
+
+.choices__list--dropdown .choices__item--selectable.is-highlighted,
+.choices__list[aria-expanded] .choices__item--selectable.is-highlighted {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%) !important;
+  color: #667eea !important;
+  border-left: 3px solid #667eea !important;
+}
+
+.choices__item {
+  font-size: 14px !important;
+}
+
+.choices__placeholder {
+  opacity: 0.6 !important;
+  color: #666 !important;
+}
+
+.choices__input {
+  background: transparent !important;
+  color: #333 !important;
+  margin-bottom: 0 !important;
+  font-size: 14px !important;
+  padding: 8px !important;
+}
+
+.choices__input::placeholder {
+  color: #999 !important;
+}
+
+.choices[data-type*="select-one"] .choices__inner {
+  padding-bottom: 8px !important;
+}
+
+.choices[data-type*="select-one"]:after {
+  border-color: #667eea transparent transparent transparent !important;
+  right: 15px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  transition: transform 0.3s ease !important;
+  border-width: 6px !important;
+  margin-top: 0 !important;
+}
+
+.choices[data-type*="select-one"].is-open:after {
+  transform: translateY(-50%) rotate(180deg) !important;
+  margin-top: 0 !important;
+}
+
+/* КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Убираем backdrop-filter у метрик, которые перекрывают dropdown */
+.metric-card,
+.chart-card,
+.table-card,
+.reports-section {
+  isolation: isolate; /* Создает новый контекст стекинга */
+  z-index: 1;
+  position: relative;
+}
+
+/* Убедимся, что header не создает проблем */
+.header {
+  position: relative;
+  z-index: 10;
+}
+
+/* Контейнер селектора должен быть выше всего */
+#company-selector-container {
+  position: relative;
+  z-index: 100000;
+}
+
+#company-selector-container > div {
+  position: relative;
+  z-index: 100001;
+}
+
+/* Стили для кнопки сброса */
+#clear-company-filter {
+  background: rgba(231, 76, 60, 0.2) !important;
+  border: 1px solid rgba(231, 76, 60, 0.3) !important;
+  color: #e74c3c !important;
+  transition: all 0.3s ease !important;
+  z-index: 100002;
+  position: relative;
+}
+
+#clear-company-filter:hover {
+  background: rgba(231, 76, 60, 0.3) !important;
+  border-color: rgba(231, 76, 60, 0.5) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(231, 76, 60, 0.2);
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+  #company-selector-container {
+    padding: 10px;
+    margin-top: 10px;
+  }
+  
+  #company-selector-container > div {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px !important;
+  }
+  
+  .choices {
+    max-width: 100% !important;
+  }
+  
+  .choices__list--dropdown,
+  .choices__list[aria-expanded] {
+    left: 10px !important;
+    right: 10px !important;
+    width: calc(100% - 20px) !important;
+    max-height: 50vh !important;
+    margin-top: 5px !important;
+  }
+}
+
+/* Анимации */
+@keyframes fadeInDropdown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.choices__list--dropdown,
+.choices__list[aria-expanded] {
+  animation: fadeInDropdown 0.3s ease-out;
+}
+
 </style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -466,14 +692,19 @@
     </div>
 
     <div id="company-selector-container" style="display: none; margin-top: 15px;">
-      <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
-        <label for="company-selector" style="font-size: 0.9rem; opacity: 0.9;">
+      <div style="display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;">
+        <label for="company-selector" style="font-size: 0.9rem; opacity: 0.9; white-space: nowrap;">
           <i class="fas fa-building"></i> Фильтр по компании:
         </label>
-        <select id="company-selector" class="period-btn" style="background: rgba(255,255,255,0.2); color: white; border: none; padding: 10px; border-radius: 8px; min-width: 200px;">
-          <option value="all">Все компании</option>
-          <!-- Опции будут загружены динамически -->
-        </select>
+        <!-- Контейнер для Choices.js -->
+        <div style="position: relative; min-width: 250px; max-width: 400px;">
+          <select id="company-selector" class="company-select" data-placeholder="Выберите компанию...">
+            <!-- Опции будут добавлены динамически -->
+          </select>
+        </div>
+        <button id="clear-company-filter" class="period-btn" style="padding: 8px 12px; display: none;" title="Сбросить фильтр">
+          <i class="fas fa-times"></i> Сбросить
+        </button>
       </div>
     </div>
     
@@ -526,6 +757,7 @@
 </div>
 
 <script>
+let choicesInstance = null; // Добавьте эту переменную в начале скрипта
   let currentPeriod = 'today';
   let refreshInterval;
   let selectedCampaignId = null;
@@ -595,13 +827,16 @@
   }
 }
 
-// Рендеринг селектора компаний
-// Рендеринг селектора компаний
+// Функция рендеринга селектора компаний с Choices.js
 function renderCompanySelector(companies, userRole) {
   const container = document.getElementById('company-selector-container');
   const selector = document.getElementById('company-selector');
+  const clearBtn = document.getElementById('clear-company-filter');
   
-  if (!container || !selector) return;
+  if (!container || !selector) {
+    console.error('❌ Элементы селектора не найдены');
+    return;
+  }
   
   console.log('📊 Компании для рендеринга:', {
     userRole,
@@ -612,55 +847,206 @@ function renderCompanySelector(companies, userRole) {
   // Показываем контейнер
   container.style.display = 'block';
   
-  // Очищаем существующие опции (кроме "Все компании")
-  while (selector.options.length > 1) {
-    selector.remove(1);
-  }
+  // Очищаем селектор
+  selector.innerHTML = '';
   
-  // Изменяем текст первой опции
-  selector.options[0].textContent = 'Выберите компанию';
+  // Создаем placeholder option
+  const placeholderOption = document.createElement('option');
+  placeholderOption.value = '';
+  placeholderOption.textContent = 'Выберите компанию...';
+  placeholderOption.disabled = false;
+  selector.appendChild(placeholderOption);
   
-  // Добавляем опции
+  // Добавляем опцию "Все компании"
+  const allOption = document.createElement('option');
+  allOption.value = 'all';
+  allOption.textContent = 'Все компании';
+  selector.appendChild(allOption);
+  
+  // Добавляем остальные компании
   companies.forEach(company => {
     const option = document.createElement('option');
-    // Конвертируем ID в строку для единообразия
     option.value = String(company.id);
     
+    let displayName = '';
     if (userRole === 'ADMIN') {
-      // Для админа: показываем рекламодателей
-      const displayName = company.name || company.email || `Рекламодатель ID: ${company.id}`;
-      option.textContent = displayName;
-      option.setAttribute('title', displayName);
+      displayName = company.name || company.email || `Рекламодатель ID: ${company.id}`;
     } else if (userRole === 'ADVERTISER') {
-      // Для рекламодателя: показываем кампании
-      let displayName = company.name || `Кампания ID: ${company.id}`;
+      displayName = company.name || `Кампания ID: ${company.id}`;
       if (company.status) {
-        displayName += ` (${company.status === 'active' ? 'активна' : 'на паузе'})`;
+        const statusText = company.status === 'active' ? 'активна' : 'на паузе';
+        displayName += ` (${statusText})`;
       }
-      option.textContent = displayName;
-      option.setAttribute('title', displayName);
     }
+    
+    option.textContent = displayName;
+    option.setAttribute('data-custom-properties', JSON.stringify({
+      name: company.name,
+      email: company.email,
+      status: company.status
+    }));
     
     selector.appendChild(option);
   });
   
-  // Устанавливаем цвет текста для видимости
-  selector.style.color = '#333';
-  selector.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
-  
-  // Сбрасываем выбор на первый элемент
-  selector.selectedIndex = 0;
-  
-  console.log(`✅ Селектор ${userRole} отрендерен. Опций: ${selector.options.length}`);
-  
-  // Добавляем обработчик изменения
-  selector.addEventListener('change', function() {
-    selectedCompanyId = this.value;
-    console.log(`✅ Выбрана ${selectedCompanyType}: ${selectedCompanyId}`);
+  // Инициализируем или обновляем Choices.js
+  if (!choicesInstance) {
+    // Инициализация Choices.js
+    choicesInstance = new Choices(selector, {
+      placeholder: true,
+      placeholderValue: 'Выберите компанию...',
+      searchEnabled: true,
+      searchChoices: true,
+      searchFields: ['label'],
+      searchPlaceholderValue: 'Поиск компании...',
+      itemSelectText: '',
+      shouldSort: false,
+      position: 'auto',
+      resetScrollPosition: false,
+      loadingText: 'Загрузка...',
+      noResultsText: 'Результатов не найдено',
+      noChoicesText: 'Нет доступных опций',
+      addItemText: (value) => `Нажмите Enter для добавления "${value}"`,
+      maxItemCount: -1,
+      removeItemButton: false,
+      classNames: {
+        containerOuter: 'choices',
+        containerInner: 'choices__inner',
+        input: 'choices__input',
+        inputCloned: 'choices__input--cloned',
+        list: 'choices__list',
+        listItems: 'choices__list--multiple',
+        listSingle: 'choices__list--single',
+        listDropdown: 'choices__list--dropdown',
+        item: 'choices__item',
+        itemSelectable: 'choices__item--selectable',
+        itemDisabled: 'choices__item--disabled',
+        itemChoice: 'choices__item--choice',
+        placeholder: 'choices__placeholder',
+        group: 'choices__group',
+        groupHeading: 'choices__heading',
+        button: 'choices__button',
+        activeState: 'is-active',
+        focusState: 'is-focused',
+        openState: 'is-open',
+        disabledState: 'is-disabled',
+        highlightedState: 'is-highlighted',
+        selectedState: 'is-selected',
+        flippedState: 'is-flipped',
+        loadingState: 'is-loading',
+        noResults: 'has-no-results',
+        noChoices: 'has-no-choices'
+      }
+    });
     
-    // Обновляем дашборд с выбранной компанией
-    loadDashboardData(currentPeriod, selectedCompanyId, selectedCompanyType);
+    console.log('✅ Choices.js инициализирован');
+  } else {
+    // Обновляем существующий экземпляр
+    choicesInstance.setChoices(
+      [
+        { value: '', label: 'Выберите компанию...', disabled: false },
+        { value: 'all', label: 'Все компании' },
+        ...companies.map(company => ({
+          value: String(company.id),
+          label: userRole === 'ADMIN' 
+            ? (company.name || company.email || `Рекламодатель ID: ${company.id}`)
+            : (company.name || `Кампания ID: ${company.id}`) + 
+              (company.status ? ` (${company.status === 'active' ? 'активна' : 'на паузе'})` : ''),
+          customProperties: {
+            name: company.name,
+            email: company.email,
+            status: company.status
+          }
+        }))
+      ],
+      'value',
+      'label',
+      false
+    );
+    
+    console.log('✅ Choices.js обновлен');
+  }
+  
+  // Обработчик выбора значения
+  selector.addEventListener('change', function(e) {
+    const selectedValue = choicesInstance.getValue(true);
+    console.log('🔘 Выбрано значение:', selectedValue);
+    
+    if (selectedValue && selectedValue !== '') {
+      selectedCompanyId = selectedValue;
+      
+      // Показать кнопку сброса
+      if (clearBtn) {
+        clearBtn.style.display = 'block';
+        clearBtn.style.animation = 'fadeIn 0.3s ease-in';
+      }
+      
+      // Обновляем дашборд
+      loadDashboardData(currentPeriod, selectedCompanyId, selectedCompanyType);
+      
+      // Обновляем заголовок
+      updateDashboardTitle(selectedCompanyId, selectedCompanyType, companies, userRole);
+    }
   });
+  
+  // Обработчик открытия/закрытия dropdown
+  selector.addEventListener('showDropdown', function(e) {
+    console.log('📋 Dropdown открыт');
+  });
+  
+  selector.addEventListener('hideDropdown', function(e) {
+    console.log('📋 Dropdown закрыт');
+  });
+  
+  // Кнопка сброса фильтра
+  if (clearBtn) {
+    clearBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Сбрасываем выбор
+      choicesInstance.setChoiceByValue('');
+      selectedCompanyId = 'all';
+      
+      // Скрыть кнопку сброса
+      this.style.display = 'none';
+      
+      // Обновляем дашборд
+      loadDashboardData(currentPeriod, 'all', selectedCompanyType);
+      
+      // Обновляем заголовок
+      updateDashboardTitle('all', selectedCompanyType, companies, userRole);
+      
+      console.log('🗑️ Фильтр сброшен');
+    });
+  }
+  
+  // Если есть сохраненный выбор, восстанавливаем его
+  const savedCompanyId = localStorage.getItem('selectedCompanyId');
+  if (savedCompanyId && choicesInstance) {
+    setTimeout(() => {
+      const optionExists = Array.from(selector.options).some(opt => opt.value === savedCompanyId);
+      if (optionExists) {
+        choicesInstance.setChoiceByValue(savedCompanyId);
+        selectedCompanyId = savedCompanyId;
+        
+        if (clearBtn && savedCompanyId !== 'all' && savedCompanyId !== '') {
+          clearBtn.style.display = 'block';
+        }
+        
+        console.log('💾 Восстановлен сохраненный выбор:', savedCompanyId);
+      }
+    }, 100);
+  }
+  
+  // Сохраняем выбор при изменении
+  selector.addEventListener('change', function() {
+    if (selectedCompanyId) {
+      localStorage.setItem('selectedCompanyId', selectedCompanyId);
+    }
+  });
+  
+  console.log(`✅ Селектор ${userRole} отрендерен с Choices.js. Опций: ${selector.options.length}`);
 }
 
   // Проверка авторизации
@@ -895,32 +1281,41 @@ function updateDashboardTitle(companyId, companyType, companies, userRole) {
   const titleElement = document.querySelector('.header h1');
   if (!titleElement) return;
   
-  let companyName = 'Все компании';
+  let companyName = '';
   
-  if (companyId && companyId !== 'all') {
-    // Ищем компанию (конвертируем ID в строку для сравнения)
+  if (companyId && companyId !== 'all' && companyId !== '') {
+    // Ищем компанию
     const company = companies.find(c => String(c.id) === String(companyId));
     if (company) {
       if (userRole === 'ADMIN') {
-        companyName = `Рекламодатель: ${company.name || company.email || `ID: ${company.id}`}`;
+        companyName = ` | Рекламодатель: ${company.name || company.email || `ID: ${company.id}`}`;
       } else if (userRole === 'ADVERTISER') {
-        companyName = `Кампания: ${company.name || `ID: ${company.id}`}`;
+        companyName = ` | Кампания: ${company.name || `ID: ${company.id}`}`;
       }
-    } else {
-      console.warn(`⚠️ Компания с ID ${companyId} не найдена в списке`, companies);
     }
   } else if (userRole === 'ADVERTISER') {
-    companyName = 'Все мои кампании';
+    companyName = ' | Все мои кампании';
   } else if (userRole === 'ADMIN') {
-    companyName = 'Все рекламодатели';
+    companyName = ' | Все рекламодатели';
   }
   
   // Обновляем заголовок
   const originalText = 'Order Master Analytics Dashboard';
-  titleElement.innerHTML = `<i class="fas fa-chart-line"></i> ${originalText}<br><small style="font-size: 0.6em; opacity: 0.8;">${companyName}</small>`;
+  titleElement.innerHTML = `
+    <i class="fas fa-chart-line"></i> ${originalText}
+    <small style="font-size: 0.6em; opacity: 0.8; display: block; margin-top: 5px;">
+      ${companyName}
+    </small>
+  `;
 }
 
   function logout() {
+     // Уничтожаем экземпляр Choices.js
+  if (choicesInstance) {
+    choicesInstance.destroy();
+    choicesInstance = null;
+  }
+    
     localStorage.removeItem('authToken');
     localStorage.removeItem('userRole');
     localStorage.removeItem('userId');
@@ -1384,5 +1779,8 @@ if (overview.targets) {
     }
   });
 </script>
+
+<script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+
 </body>
 </html>
