@@ -1728,14 +1728,25 @@ if (overview.targets) {
     loadDashboardData(currentPeriod);
     
     // Обработчики кнопок периода дашборда
-    document.querySelectorAll('.period-btn').forEach(btn => {
-      btn.addEventListener('click', function() {
-        document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-        this.classList.add('active');
-        currentPeriod = this.dataset.period;
-        loadDashboardData(currentPeriod);
-      });
-    });
+    // Обработчики кнопок периода дашборда
+document.querySelectorAll('.period-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    currentPeriod = this.dataset.period;
+    
+    // Сохраняем текущий выбор компании перед загрузкой
+    if (choicesInstance) {
+      const currentValue = choicesInstance.getValue(true);
+      if (currentValue && currentValue !== '') {
+        selectedCompanyId = currentValue;
+      }
+    }
+    
+    // Загружаем данные с сохраненной компанией
+    loadDashboardData(currentPeriod, selectedCompanyId, selectedCompanyType);
+  });
+});
     
     // Обработчики кнопок периода отчетов
     document.querySelectorAll('.date-range-btn').forEach(btn => {
@@ -1768,8 +1779,28 @@ if (overview.targets) {
     
     // Автообновление каждые 30 секунд
     refreshInterval = setInterval(() => {
-      loadDashboardData(currentPeriod);
-    }, 30000);
+  // Получаем текущий выбор компании
+  let companyToLoad = 'all';
+  let companyTypeToLoad = selectedCompanyType;
+  
+  if (choicesInstance) {
+    const currentValue = choicesInstance.getValue(true);
+    if (currentValue && currentValue !== '') {
+      companyToLoad = currentValue;
+      selectedCompanyId = currentValue;
+    }
+  } else if (selectedCompanyId && selectedCompanyId !== 'all') {
+    companyToLoad = selectedCompanyId;
+  }
+  
+  // Загружаем данные с сохраненными фильтрами
+  loadDashboardData(currentPeriod, companyToLoad, companyTypeToLoad);
+  console.log('🔄 Автообновление данных с фильтрами:', {
+    period: currentPeriod,
+    companyId: companyToLoad,
+    companyType: companyTypeToLoad
+  });
+}, 30000);
   });
   
   // Очистка интервала при закрытии страницы
